@@ -1,4 +1,5 @@
 name: Build TG7 Editor APK
+
 on:
   push:
     branches: [ main, master ]
@@ -7,16 +8,46 @@ on:
 jobs:
   build-tg7-apk:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v5
+      - name: Checkout TG7 Editor Workspace
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
         with:
           java-version: '17'
           distribution: 'temurin'
-      - uses: android-actions/setup-android@v3
-      - run: git clone --depth 1 https://github.com/tharunbirla/LibreCuts.git librecuts-build
-      - run: python3 android-tg7/apply_tg7_overlay.py librecuts-build android-tg7
-      - uses: gradle/actions/setup-gradle@v4
-      - working-directory: librecuts-build
-        run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon
-        
+
+      - name: Clone LibreCuts Base Engine
+        run: |
+          rm -rf librecuts-build
+          git clone --depth 1 https://github.com/tharunbirla/LibreCuts.git librecuts-build
+
+      - name: Apply TG7 Editor Rebrand & Theme Overlay
+        run: |
+          python3 android-tg7/apply_tg7_overlay.py librecuts-build android-tg7
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Compile TG7 Editor Debug APK
+        working-directory: librecuts-build
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Rename Output APK
+        run: |
+          mkdir -p dist-apk
+          APK_PATH=$(find librecuts-build/app/build/outputs/apk/debug -name "*.apk" | head -n 1)
+          test -n "$APK_PATH"
+          cp "$APK_PATH" dist-apk/TG7-Editor-com.tg7.editor-debug.apk
+
+      - name: Upload TG7 Editor APK Artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: TG7-Editor-APK
+          path: dist-apk/TG7-Editor-com.tg7.editor-debug.apk
+          if-no-files-found: error
+          retention-days: 30

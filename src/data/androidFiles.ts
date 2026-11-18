@@ -24,15 +24,14 @@ jobs:
   build-tg7-apk:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
         with:
           java-version: '17'
           distribution: 'temurin'
-      - uses: android-actions/setup-android@v3
       - run: git clone --depth 1 https://github.com/tharunbirla/LibreCuts.git librecuts-build
       - run: python3 android-tg7/apply_tg7_overlay.py librecuts-build android-tg7
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
       - working-directory: librecuts-build
         run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon`,
   },
