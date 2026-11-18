@@ -8,6 +8,8 @@ import {
   VideoEffectType,
 } from '../types/editor';
 import { svgMarkupToDataUrl } from '../data/svgStickers';
+import { applyWebGlEffectPass } from './glEffectRenderer';
+import { renderGlTransitionFrame } from './glTransitionRenderer';
 
 export interface InterpolatedTransform {
   x: number;
@@ -21,6 +23,10 @@ let cachedFastCanvas: HTMLCanvasElement | null = null;
 let cachedFastCtx: CanvasRenderingContext2D | null = null;
 let cachedChromaCanvas: HTMLCanvasElement | null = null;
 let cachedChromaCtx: CanvasRenderingContext2D | null = null;
+let cachedTransFromCanvas: HTMLCanvasElement | null = null;
+let cachedTransFromCtx: CanvasRenderingContext2D | null = null;
+let cachedTransToCanvas: HTMLCanvasElement | null = null;
+let cachedTransToCtx: CanvasRenderingContext2D | null = null;
 const svgImageCache = new Map<string, HTMLImageElement>();
 
 function getOffscreenTarget(
@@ -48,6 +54,31 @@ function getOffscreenTarget(
     cachedFastCanvas.height = height;
   }
   return { canvas: cachedFastCanvas, ctx: cachedFastCtx };
+}
+
+function getTransitionBuffers(width: number, height: number) {
+  if (!cachedTransFromCanvas) {
+    cachedTransFromCanvas = document.createElement('canvas');
+    cachedTransFromCtx = cachedTransFromCanvas.getContext('2d');
+  }
+  if (!cachedTransToCanvas) {
+    cachedTransToCanvas = document.createElement('canvas');
+    cachedTransToCtx = cachedTransToCanvas.getContext('2d');
+  }
+  if (cachedTransFromCanvas.width !== width || cachedTransFromCanvas.height !== height) {
+    cachedTransFromCanvas.width = width;
+    cachedTransFromCanvas.height = height;
+  }
+  if (cachedTransToCanvas.width !== width || cachedTransToCanvas.height !== height) {
+    cachedTransToCanvas.width = width;
+    cachedTransToCanvas.height = height;
+  }
+  return {
+    fromCanvas: cachedTransFromCanvas,
+    fromCtx: cachedTransFromCtx,
+    toCanvas: cachedTransToCanvas,
+    toCtx: cachedTransToCtx,
+  };
 }
 
 export function formatTimecode(seconds: number): string {
@@ -256,8 +287,8 @@ function drawStockScene(
     ctx.fillStyle = '#120A05';
     ctx.fillRect(0, 0, w, h);
     for (let i = 0; i < 32; i++) {
-      const x = ((i * 97 + Math.sin(t * 2 + i) * 40) % w + w) % w;
-      const y = h - (((t * 75 + i * 45) % (h + 40)));
+      const x = (((i * 97 + Math.sin(t * 2 + i) * 40) % w) + w) % w;
+      const y = h - ((t * 75 + i * 45) % (h + 40));
       ctx.fillStyle = i % 2 === 0 ? 'rgba(251,191,36,0.75)' : 'rgba(249,115,22,0.65)';
       ctx.beginPath();
       ctx.arc(x, y, 2 + (i % 4), 0, Math.PI * 2);
@@ -297,7 +328,6 @@ function drawStockScene(
     return;
   }
 
-  // Default cyber-grid / glass-prism
   const grad = ctx.createLinearGradient(0, 0, w, h);
   grad.addColorStop(0, '#0F172A');
   grad.addColorStop(0.55, '#1E293B');
@@ -401,48 +431,6 @@ function drawProceduralChromaBadge(
   ctx.restore();
 }
 
-function drawMemeCard(
-  ctx: CanvasRenderingContext2D,
-  w: number,
-  h: number,
-  clip: Clip,
-  localTime: number
-): void {
-  if (clip.chromaKey.enabled) {
-    ctx.fillStyle = '#00FF00';
-    ctx.fillRect(0, 0, w, h);
-  }
-
-  const pop = localTime < 0.25 ? 0.65 + (localTime / 0.25) * 0.4 : 1.0;
-  const accent = clip.memeAccent || '#00CAE0';
-
-  ctx.save();
-  ctx.translate(w / 2, h / 2);
-  ctx.scale(pop, pop);
-
-  // Punchy Meme Banner Card
-  ctx.fillStyle = '#0B0B10';
-  ctx.strokeStyle = accent;
-  ctx.lineWidth = 6;
-  ctx.beginPath();
-  ctx.roundRect(-210, -86, 420, 172, 18);
-  ctx.fill();
-  ctx.stroke();
-
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-
-  ctx.fillStyle = '#FFFFFF';
-  ctx.font = '700 38px "Anton", "Outfit", sans-serif';
-  ctx.fillText((clip.memeTopText || clip.name).toUpperCase(), 0, -24);
-
-  ctx.fillStyle = accent;
-  ctx.font = '700 46px "Bangers", "Outfit", sans-serif';
-  ctx.fillText((clip.memeBottomText || 'MEME').toUpperCase(), 0, 30);
-
-  ctx.restore();
-}
-
 function drawSvgSticker(
   ctx: CanvasRenderingContext2D,
   w: number,
@@ -475,6 +463,63 @@ function drawSvgSticker(
   ctx.restore();
 }
 
+function buildLinearGradientForText(
+  ctx: CanvasRenderingContext2D,
+  boxW: number,
+  boxH: number,
+  angleDeg: number,
+  c1: string,
+  c2: string
+): CanvasGradient {
+  const rad = ((angleDeg - 90) * Math.PI) / 180;
+  const halfLen = Math.max(boxW, boxH) * 0.55;
+  const dx = Math.cos(rad) * halfLen;
+  const dy = Math.sin(rad) * halfLen;
+  const grad = ctx.createLinearGradient(-dx, -dy, dx, dy);
+  grad.addColorStop(0, c1);
+  grad.addColorStop(1, c2);
+  return grad;
+}
+
+function drawSpacedLine(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  y: number,
+  letterSpacing: number,
+  mode: 'fill' | 'stroke'
+): void {
+  if (letterSpacing === 0 || text.length <= 1) {
+    if (mode === 'stroke') ctx.strokeText(text, 0, y);
+    else ctx.fillText(text, 0, y);
+    return;
+  }
+  const chars = Array.from(text);
+  const widths = chars.map((ch) => ctx.measureText(ch).width);
+  const totalW = widths.reduce((a, b) => a + b, 0) + letterSpacing * (chars.length - 1);
+  let cursorX = -totalW / 2;
+  const prevAlign = ctx.textAlign;
+  ctx.textAlign = 'left';
+  for (let i = 0; i < chars.length; i++) {
+    if (mode === 'stroke') ctx.strokeText(chars[i], cursorX, y);
+    else ctx.fillText(chars[i], cursorX, y);
+    cursorX += widths[i] + letterSpacing;
+  }
+  ctx.textAlign = prevAlign;
+}
+
+function measureSpacedLine(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  letterSpacing: number
+): number {
+  if (letterSpacing === 0 || text.length <= 1) {
+    return ctx.measureText(text).width;
+  }
+  const chars = Array.from(text);
+  const base = chars.reduce((acc, ch) => acc + ctx.measureText(ch).width, 0);
+  return base + letterSpacing * (chars.length - 1);
+}
+
 function drawAnimatedText(
   ctx: CanvasRenderingContext2D,
   w: number,
@@ -482,118 +527,239 @@ function drawAnimatedText(
   clip: Clip,
   localTime: number
 ): void {
-  const fullText = clip.textContent || clip.name;
+  const rawText = clip.textContent || clip.name || 'TEXT';
+  const fullText = clip.textUppercase ? rawText.toUpperCase() : rawText;
   const anim: TextAnimationType = clip.textAnimation || 'none';
   const stylePreset: TextStylePreset = clip.textStyle || 'outline';
   const fontFam = clip.fontFamily || 'Outfit';
-  const fontSize = Math.max(28, Math.min(140, clip.fontSize || 74));
+  const fontSize = Math.max(24, Math.min(160, clip.fontSize || 74));
   const color = clip.textColor || '#FFFFFF';
+  const letterSpacing = clip.textLetterSpacing ?? 0;
 
   let visibleText = fullText;
-  let offsetY = 0;
-  let extraScale = 1;
-  let extraAlpha = 1;
   let offsetX = 0;
+  let offsetY = 0;
+  let scaleX = 1;
+  let scaleY = 1;
+  let extraRot = 0;
+  let skewX = 0;
+  let extraAlpha = 1;
+
+  // Execute authentic Animate.css keyframe motion curves on canvas
+  const tNorm = Math.min(1, localTime / 0.75);
 
   if (anim === 'typewriter') {
     const progress = Math.min(1, localTime / Math.min(1.6, clip.durationSec * 0.7));
     const chars = Math.max(1, Math.ceil(fullText.length * progress));
     visibleText = fullText.slice(0, chars);
-  } else if (anim === 'pop-bounce') {
-    const p = Math.min(1, localTime / 0.35);
-    extraScale = p < 0.7 ? (p / 0.7) * 1.24 : 1.24 - ((p - 0.7) / 0.3) * 0.24;
-  } else if (anim === 'slide-up') {
-    const p = Math.min(1, localTime / 0.4);
-    offsetY = (1 - cubicEaseInOut(p)) * 90;
+  } else if (anim === 'bounceIn') {
+    if (tNorm < 0.2) {
+      const s = 0.3 + (tNorm / 0.2) * 0.82;
+      scaleX = scaleY = s;
+      extraAlpha = tNorm / 0.2;
+    } else if (tNorm < 0.45) {
+      const s = 1.12 - ((tNorm - 0.2) / 0.25) * 0.22;
+      scaleX = scaleY = s;
+    } else if (tNorm < 0.7) {
+      const s = 0.9 + ((tNorm - 0.45) / 0.25) * 0.14;
+      scaleX = scaleY = s;
+    } else {
+      const s = 1.04 - ((tNorm - 0.7) / 0.3) * 0.04;
+      scaleX = scaleY = s;
+    }
+  } else if (anim === 'rubberBand') {
+    if (tNorm < 0.3) {
+      const p = tNorm / 0.3;
+      scaleX = 1 + 0.28 * p;
+      scaleY = 1 - 0.25 * p;
+    } else if (tNorm < 0.5) {
+      const p = (tNorm - 0.3) / 0.2;
+      scaleX = 1.28 - 0.48 * p;
+      scaleY = 0.75 + 0.42 * p;
+    } else if (tNorm < 0.75) {
+      const p = (tNorm - 0.5) / 0.25;
+      scaleX = 0.8 + 0.28 * p;
+      scaleY = 1.17 - 0.22 * p;
+    } else {
+      const p = (tNorm - 0.75) / 0.25;
+      scaleX = 1.08 - 0.08 * p;
+      scaleY = 0.95 + 0.05 * p;
+    }
+  } else if (anim === 'tada') {
+    if (localTime < 0.9) {
+      const p = localTime / 0.9;
+      scaleX = scaleY = p < 0.2 ? 0.9 : 1 + Math.sin(p * Math.PI) * 0.14;
+      extraRot = Math.sin(p * Math.PI * 6) * (p < 0.2 ? 3 : 5) * (1 - p * 0.5);
+    }
+  } else if (anim === 'jello') {
+    if (localTime < 0.9) {
+      const p = localTime / 0.9;
+      skewX = Math.sin(p * Math.PI * 5) * 0.28 * (1 - p);
+    }
+  } else if (anim === 'jackInTheBox') {
+    const p = Math.min(1, localTime / 0.7);
     extraAlpha = p;
+    scaleX = scaleY = 0.15 + cubicEaseInOut(p) * 0.85;
+    extraRot = p < 0.5 ? 25 * (1 - p * 2) : -8 * (1 - p);
+  } else if (anim === 'backInUp') {
+    const p = Math.min(1, localTime / 0.65);
+    extraAlpha = Math.min(1, p * 1.4);
+    offsetY = (1 - cubicEaseInOut(p)) * (h * 0.36);
+    scaleX = scaleY = p < 0.8 ? 0.72 + (p / 0.8) * 0.28 : 1;
+  } else if (anim === 'zoomInDown') {
+    const p = Math.min(1, localTime / 0.65);
+    extraAlpha = p;
+    scaleX = scaleY = 0.2 + cubicEaseInOut(p) * 0.8;
+    offsetY = (1 - cubicEaseInOut(p)) * -(h * 0.34);
+  } else if (anim === 'flipInX') {
+    const p = Math.min(1, localTime / 0.6);
+    extraAlpha = Math.min(1, p * 1.5);
+    scaleY = Math.max(0.05, Math.abs(Math.cos((1 - p) * (Math.PI / 2))));
+  } else if (anim === 'lightSpeedInRight') {
+    const p = Math.min(1, localTime / 0.55);
+    const e = cubicEaseInOut(p);
+    extraAlpha = p;
+    offsetX = (1 - e) * (w * 0.55);
+    skewX = -0.35 * (1 - e);
   } else if (anim === 'glitch-flicker') {
-    if (localTime < 0.45 || Math.floor(localTime * 12) % 9 === 0) {
-      offsetX = Math.sin(localTime * 90) * 12;
+    if (localTime < 0.55 || Math.floor(localTime * 12) % 9 === 0) {
+      offsetX = Math.sin(localTime * 95) * 14;
       extraAlpha = 0.78 + Math.sin(localTime * 60) * 0.22;
     }
-  } else if (anim === 'neon-pulse') {
-    extraScale = 1 + Math.sin(localTime * 6) * 0.06;
-  } else if (anim === 'zoom-reveal') {
-    const p = Math.min(1, localTime / 0.5);
-    extraScale = 0.3 + cubicEaseInOut(p) * 0.7;
-    extraAlpha = p;
   }
+
+  const lines = visibleText.split(/\r?\n/);
+  const lineHeight = fontSize * 1.18;
+  const totalBlockH = lines.length * lineHeight;
 
   ctx.save();
   ctx.translate(w / 2 + offsetX, h / 2 + offsetY);
-  ctx.scale(extraScale, extraScale);
+  if (extraRot !== 0) ctx.rotate((extraRot * Math.PI) / 180);
+  if (skewX !== 0) ctx.transform(1, 0, skewX, 1, 0, 0);
+  ctx.scale(scaleX, scaleY);
   ctx.globalAlpha = Math.max(0, Math.min(1, extraAlpha));
   ctx.font = `800 ${fontSize}px "${fontFam}", "Outfit", sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
-  const textWidth = ctx.measureText(visibleText).width;
+  const maxLineWidth = Math.max(
+    40,
+    ...lines.map((line) => measureSpacedLine(ctx, line, letterSpacing))
+  );
 
-  if (stylePreset === 'cyber-box') {
-    const padX = 28;
-    const boxH = fontSize * 1.32;
-    const boxW = textWidth + padX * 2;
-    ctx.fillStyle = 'rgba(8, 10, 15, 0.88)';
-    ctx.strokeStyle = color === '#FFFFFF' ? '#00CAE0' : color;
-    ctx.lineWidth = 4;
+  // Determine effective styling (explicit overrides take precedence over preset defaults)
+  const useBgBox = clip.textBgEnabled ?? stylePreset === 'cyber-box';
+  const bgColor = clip.textBgColor || 'rgba(8, 10, 15, 0.88)';
+  const bgRadius = clip.textBgRadius ?? 14;
+
+  const defaultStrokeW =
+    stylePreset === 'outline' || stylePreset === 'gradient-fire'
+      ? Math.max(7, Math.round(fontSize * 0.14))
+      : stylePreset === '3d-pop'
+        ? Math.max(5, Math.round(fontSize * 0.1))
+        : stylePreset === 'neon-glow'
+          ? 4
+          : 0;
+  const strokeWidth = clip.textStrokeWidth ?? defaultStrokeW;
+  const strokeColor =
+    clip.textStrokeColor ||
+    (stylePreset === 'neon-glow' ? (color === '#FFFFFF' ? '#00CAE0' : color) : '#000000');
+
+  const shadowColor =
+    clip.textShadowColor ??
+    (stylePreset === 'neon-glow'
+      ? color === '#FFFFFF'
+        ? '#00CAE0'
+        : color
+      : 'rgba(0,0,0,0.85)');
+  const shadowBlur =
+    clip.textShadowBlur ??
+    (stylePreset === 'neon-glow' ? 30 : stylePreset === 'clean' || stylePreset === 'outline' ? 14 : 0);
+  const shadowOffX = clip.textShadowOffsetX ?? 0;
+  const shadowOffY = clip.textShadowOffsetY ?? 0;
+
+  const useGradient =
+    clip.textGradientEnabled ?? stylePreset === 'gradient-fire';
+  const gradC1 = clip.textGradientColor1 || '#00CAE0';
+  const gradC2 =
+    clip.textGradientColor2 || (color === '#FFFFFF' ? '#34D399' : color);
+  const gradAngle = clip.textGradientAngle ?? 90;
+
+  // 1. Optional Background Caption Box
+  if (useBgBox) {
+    const padX = Math.max(20, fontSize * 0.36);
+    const padY = Math.max(12, fontSize * 0.2);
+    const boxW = maxLineWidth + padX * 2;
+    const boxH = totalBlockH + padY;
+    ctx.save();
+    ctx.fillStyle = bgColor;
     ctx.beginPath();
-    ctx.roundRect(-boxW / 2, -boxH / 2, boxW, boxH, 14);
+    ctx.roundRect(-boxW / 2, -boxH / 2, boxW, boxH, bgRadius);
     ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = color;
-    ctx.fillText(visibleText, 0, 2);
-  } else if (stylePreset === '3d-pop') {
-    const depth = Math.max(4, Math.round(fontSize * 0.09));
-    ctx.fillStyle = '#0B0F1A';
-    for (let d = depth; d >= 1; d--) {
-      ctx.fillText(visibleText, d * 1.1, d * 1.2);
+    if (stylePreset === 'cyber-box') {
+      ctx.strokeStyle = color === '#FFFFFF' ? '#00CAE0' : color;
+      ctx.lineWidth = 3.5;
+      ctx.stroke();
     }
-    ctx.lineJoin = 'round';
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = Math.max(5, fontSize * 0.1);
-    ctx.strokeText(visibleText, 0, 0);
-    ctx.fillStyle = color;
-    ctx.fillText(visibleText, 0, 0);
-  } else if (stylePreset === 'gradient-fire') {
-    const grad = ctx.createLinearGradient(-textWidth / 2, -fontSize / 2, textWidth / 2, fontSize / 2);
-    grad.addColorStop(0, '#00CAE0');
-    grad.addColorStop(0.5, '#FFFFFF');
-    grad.addColorStop(1, color === '#FFFFFF' ? '#34D399' : color);
-    ctx.lineJoin = 'round';
-    ctx.strokeStyle = '#050508';
-    ctx.lineWidth = Math.max(6, fontSize * 0.12);
-    ctx.strokeText(visibleText, 0, 0);
-    ctx.fillStyle = grad;
-    ctx.fillText(visibleText, 0, 0);
-  } else if (stylePreset === 'neon-glow') {
-    const glowColor = color === '#FFFFFF' ? '#00CAE0' : color;
-    ctx.shadowColor = glowColor;
-    ctx.shadowBlur = 32;
-    ctx.strokeStyle = glowColor;
-    ctx.lineWidth = 4;
-    ctx.strokeText(visibleText, 0, 0);
-    ctx.fillStyle = '#FFFFFF';
-    ctx.fillText(visibleText, 0, 0);
-  } else if (stylePreset === 'outline') {
-    ctx.lineJoin = 'round';
-    ctx.shadowColor = 'rgba(0,0,0,0.85)';
-    ctx.shadowBlur = 14;
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = Math.max(7, fontSize * 0.15);
-    ctx.strokeText(visibleText, 0, 0);
-    ctx.fillStyle = color;
-    ctx.fillText(visibleText, 0, 0);
-  } else {
-    ctx.fillStyle = color;
-    ctx.shadowColor = anim === 'neon-pulse' ? color : 'rgba(0, 0, 0, 0.85)';
-    ctx.shadowBlur = anim === 'neon-pulse' ? 28 : 16;
-    ctx.fillText(visibleText, 0, 0);
+    ctx.restore();
   }
+
+  const fillPaint: string | CanvasGradient = useGradient
+    ? buildLinearGradientForText(ctx, maxLineWidth, totalBlockH, gradAngle, gradC1, gradC2)
+    : stylePreset === 'neon-glow' && !clip.textColor
+      ? '#FFFFFF'
+      : color;
+
+  // 2. Render each line with 3D Extrude / Shadow / Stroke / Fill
+  lines.forEach((line, lineIdx) => {
+    const y = (lineIdx - (lines.length - 1) / 2) * lineHeight;
+
+    // 3D Extrude depth stack
+    if (stylePreset === '3d-pop') {
+      const depth = Math.max(4, Math.round(fontSize * 0.09));
+      ctx.save();
+      ctx.fillStyle = '#0B0F1A';
+      for (let d = depth; d >= 1; d--) {
+        drawSpacedLine(ctx, line, y + d * 1.2, letterSpacing, 'fill');
+      }
+      ctx.restore();
+    }
+
+    // Shadow / Neon Glow + Stroke pass
+    if (strokeWidth > 0) {
+      ctx.save();
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = strokeWidth;
+      ctx.shadowColor = shadowColor;
+      ctx.shadowBlur = shadowBlur;
+      ctx.shadowOffsetX = shadowOffX;
+      ctx.shadowOffsetY = shadowOffY;
+      drawSpacedLine(ctx, line, y, letterSpacing, 'stroke');
+      ctx.restore();
+    } else if (shadowBlur > 0 || shadowOffX !== 0 || shadowOffY !== 0) {
+      ctx.save();
+      ctx.fillStyle = fillPaint;
+      ctx.shadowColor = shadowColor;
+      ctx.shadowBlur = shadowBlur;
+      ctx.shadowOffsetX = shadowOffX;
+      ctx.shadowOffsetY = shadowOffY;
+      drawSpacedLine(ctx, line, y, letterSpacing, 'fill');
+      ctx.restore();
+    }
+
+    // Crisp Fill pass on top
+    ctx.save();
+    ctx.fillStyle = fillPaint;
+    drawSpacedLine(ctx, line, y, letterSpacing, 'fill');
+    ctx.restore();
+  });
 
   ctx.restore();
 }
 
-function applyVideoEffectPass(
+function apply2dFallbackEffect(
   ctx: CanvasRenderingContext2D,
   w: number,
   h: number,
@@ -601,163 +767,76 @@ function applyVideoEffectPass(
   intensity: number,
   timeSec: number
 ): void {
-  if (effectType === 'none') return;
+  if (
+    effectType === 'none' ||
+    effectType === 'shake-impact' ||
+    effectType === 'zoom-pulse' ||
+    effectType === 'heartbeat-pump' ||
+    effectType === 'whiplash-pan'
+  ) {
+    return;
+  }
   const strength = Math.max(0.1, intensity / 100);
-
-  if (effectType === 'vhs-retro') {
-    ctx.save();
-    ctx.fillStyle = `rgba(0, 0, 0, ${0.28 * strength})`;
-    for (let y = 0; y < h; y += 5) {
-      ctx.fillRect(0, y, w, 2);
-    }
-    const barY = (timeSec * 165) % h;
-    ctx.fillStyle = `rgba(255, 255, 255, ${0.18 * strength})`;
-    ctx.fillRect(0, barY, w, 18);
-    ctx.fillStyle = `rgba(0, 202, 224, ${0.1 * strength})`;
-    ctx.fillRect(4 * strength, barY + 4, w, 5);
-    ctx.restore();
-  } else if (effectType === 'rgb-glitch') {
-    const shift = Math.sin(timeSec * 28) * 20 * strength;
-    ctx.save();
-    ctx.globalCompositeOperation = 'screen';
-    ctx.fillStyle = `rgba(255, 20, 90, ${0.2 * strength})`;
-    ctx.fillRect(shift, 0, w, h);
-    ctx.fillStyle = `rgba(0, 225, 255, ${0.2 * strength})`;
-    ctx.fillRect(-shift, 0, w, h);
-    // Horizontal tear slices
-    for (let i = 0; i < 4; i++) {
-      const bandY = ((Math.sin(timeSec * 19 + i * 2.1) * 0.5 + 0.5) * h) % h;
-      const bandH = 12 + (i % 3) * 14;
-      ctx.fillStyle = i % 2 === 0 ? `rgba(0,225,255,${0.25 * strength})` : `rgba(244,63,94,${0.25 * strength})`;
-      ctx.fillRect(Math.sin(timeSec * 40 + i) * 45 * strength, bandY, w, bandH);
-    }
-    ctx.restore();
-  } else if (effectType === 'cyber-prism') {
-    ctx.save();
-    ctx.globalCompositeOperation = 'screen';
-    const sweep = ((timeSec * 0.55) % 1.4) - 0.2;
-    const cx = w * sweep;
-    const grad = ctx.createLinearGradient(cx - w * 0.25, 0, cx + w * 0.25, h);
-    grad.addColorStop(0, 'rgba(0,0,0,0)');
-    grad.addColorStop(0.35, `rgba(0, 202, 224, ${0.38 * strength})`);
-    grad.addColorStop(0.55, `rgba(167, 139, 250, ${0.42 * strength})`);
-    grad.addColorStop(0.75, `rgba(244, 114, 182, ${0.25 * strength})`);
-    grad.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, w, h);
-    ctx.restore();
-  } else if (effectType === 'motion-blur-zoom') {
-    ctx.save();
-    ctx.strokeStyle = `rgba(255, 255, 255, ${0.24 * strength})`;
-    ctx.lineWidth = 3;
-    const pulse = (timeSec * 2.2) % 1;
-    for (let i = 0; i < 16; i++) {
-      const ang = (i / 16) * Math.PI * 2;
-      const r1 = w * (0.28 + pulse * 0.12);
-      const r2 = w * 0.65;
-      ctx.beginPath();
-      ctx.moveTo(w / 2 + Math.cos(ang) * r1, h / 2 + Math.sin(ang) * r1);
-      ctx.lineTo(w / 2 + Math.cos(ang) * r2, h / 2 + Math.sin(ang) * r2);
-      ctx.stroke();
-    }
-    ctx.restore();
-  } else if (effectType === 'cinematic-teal') {
-    ctx.save();
-    const grad = ctx.createLinearGradient(0, 0, w, h);
-    grad.addColorStop(0, `rgba(13, 148, 136, ${0.32 * strength})`);
-    grad.addColorStop(1, `rgba(249, 115, 22, ${0.28 * strength})`);
-    ctx.globalCompositeOperation = 'soft-light';
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, w, h);
-    ctx.restore();
-  } else if (effectType === 'neon-flash') {
-    const beat = Math.pow(Math.abs(Math.sin(timeSec * 8)), 5);
-    ctx.save();
-    ctx.fillStyle = `rgba(255, 255, 255, ${beat * 0.6 * strength})`;
-    ctx.fillRect(0, 0, w, h);
-    ctx.restore();
-  } else if (effectType === 'vignette') {
+  if (effectType === 'vignette') {
     const grad = ctx.createRadialGradient(w / 2, h / 2, w * 0.22, w / 2, h / 2, w * 0.7);
     grad.addColorStop(0, 'rgba(0,0,0,0)');
-    grad.addColorStop(1, `rgba(0,0,0,${0.9 * strength})`);
+    grad.addColorStop(1, `rgba(0,0,0,${0.88 * strength})`);
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, w, h);
-  } else if (effectType === 'warm-gold') {
-    ctx.save();
-    ctx.fillStyle = `rgba(251, 191, 36, ${0.24 * strength})`;
+  } else if (effectType === 'neon-flash') {
+    const beat = Math.pow(Math.abs(Math.sin(timeSec * 8)), 5);
+    ctx.fillStyle = `rgba(255, 255, 255, ${beat * 0.55 * strength})`;
     ctx.fillRect(0, 0, w, h);
-    ctx.restore();
-  } else if (effectType === 'bw-contrast') {
-    ctx.save();
-    ctx.globalCompositeOperation = 'saturation';
-    ctx.fillStyle = 'hsl(0, 0%, 50%)';
-    ctx.fillRect(0, 0, w, h);
-    ctx.restore();
-  } else if (effectType === 'edge-glow') {
-    ctx.save();
-    ctx.shadowColor = '#00CAE0';
-    ctx.shadowBlur = 28 * strength;
-    ctx.strokeStyle = `rgba(0, 202, 224, ${0.85 * strength})`;
-    ctx.lineWidth = 14 * strength;
-    ctx.strokeRect(7, 7, w - 14, h - 14);
-    ctx.restore();
   }
 }
 
-export function renderCompositeFrame(
-  ctx: CanvasRenderingContext2D,
+function renderClipRawToCanvas(
+  targetCtx: CanvasRenderingContext2D,
+  targetCanvas: HTMLCanvasElement,
   width: number,
   height: number,
-  project: ProjectState,
+  clip: Clip,
   mediaElements: Map<string, HTMLVideoElement | HTMLImageElement | HTMLAudioElement>,
   timeSec: number
-): void {
-  ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = '#060608';
-  ctx.fillRect(0, 0, width, height);
+): {
+  localTime: number;
+  transform: InterpolatedTransform;
+  shakeX: number;
+  shakeY: number;
+  pulseScale: number;
+  hasCrop: boolean;
+  cropLeft: number;
+  cropTop: number;
+  cropRight: number;
+  cropBottom: number;
+} {
+  const localTime = Math.max(0, timeSec - clip.startSec);
+  const normPos = localTime / Math.max(0.1, clip.durationSec);
+  const speedNow = evaluateSpeedAt(clip.speedRamp.points, normPos);
+  const remappedTime = computeRemappedSourceTime(clip, localTime);
+  const transform = interpolateTransform(clip, localTime);
 
-  const visualTracks = project.tracks.filter((t) => t.type !== 'audio' && !t.hidden);
+  targetCtx.clearRect(0, 0, width, height);
 
-  for (const track of visualTracks) {
-    const activeClips = project.clips.filter(
-      (c) =>
-        c.trackId === track.id &&
-        timeSec >= c.startSec &&
-        timeSec <= c.startSec + c.durationSec
-    );
-
-    for (const clip of activeClips) {
-      const localTime = Math.max(0, timeSec - clip.startSec);
-      const normPos = localTime / Math.max(0.1, clip.durationSec);
-      const speedNow = evaluateSpeedAt(clip.speedRamp.points, normPos);
-      const remappedTime = computeRemappedSourceTime(clip, localTime);
-      const transform = interpolateTransform(clip, localTime);
-
-      const { canvas: offscreen, ctx: offCtx } = getOffscreenTarget(
-        width,
-        height,
-        clip.chromaKey.enabled
-      );
-      if (!offCtx) continue;
-      offCtx.clearRect(0, 0, width, height);
-
-      if (clip.sourceType === 'demo-arena') {
-        drawStockScene(offCtx, width, height, 'cyber-grid', remappedTime);
-      } else if (clip.sourceType === 'demo-clutch') {
-        drawProceduralClutch(offCtx, width, height, remappedTime, speedNow);
-      } else if (clip.sourceType === 'demo-chroma') {
-        drawProceduralChromaBadge(offCtx, width, height, remappedTime);
-      } else if (clip.sourceType === 'stock-clip') {
-        drawStockScene(offCtx, width, height, clip.stockVariant || 'cyber-grid', remappedTime);
-      } else if (clip.sourceType === 'meme-clip') {
-        drawMemeCard(offCtx, width, height, clip, localTime);
-      } else if (clip.sourceType === 'svg-sticker') {
-        drawSvgSticker(offCtx, width, height, clip, localTime);
-      } else if (clip.sourceType === 'demo-text') {
-        drawAnimatedText(offCtx, width, height, clip, localTime);
-      } else if (clip.sourceType === 'local-video' || clip.sourceType === 'local-image') {
-        const el = mediaElements.get(clip.id);
-        if (el && (el instanceof HTMLVideoElement || el instanceof HTMLImageElement)) {
+  try {
+    if (clip.sourceType === 'demo-arena') {
+      drawStockScene(targetCtx, width, height, 'cyber-grid', remappedTime);
+    } else if (clip.sourceType === 'demo-clutch') {
+      drawProceduralClutch(targetCtx, width, height, remappedTime, speedNow);
+    } else if (clip.sourceType === 'demo-chroma') {
+      drawProceduralChromaBadge(targetCtx, width, height, remappedTime);
+    } else if (clip.sourceType === 'stock-clip') {
+      drawStockScene(targetCtx, width, height, clip.stockVariant || 'cyber-grid', remappedTime);
+    } else if (clip.sourceType === 'svg-sticker') {
+      drawSvgSticker(targetCtx, width, height, clip, localTime);
+    } else if (clip.sourceType === 'demo-text') {
+      drawAnimatedText(targetCtx, width, height, clip, localTime);
+    } else if (clip.sourceType === 'local-video' || clip.sourceType === 'local-image') {
+      const el = mediaElements.get(clip.id);
+      if (el && (el instanceof HTMLVideoElement || el instanceof HTMLImageElement)) {
+        const isReady =
+          el instanceof HTMLVideoElement ? el.readyState >= 2 : el.complete && el.naturalWidth > 0;
+        if (isReady) {
           const mediaW =
             el instanceof HTMLVideoElement ? el.videoWidth || width : el.naturalWidth || width;
           const mediaH =
@@ -768,172 +847,247 @@ export function renderCompositeFrame(
             : Math.min(width / mediaW, height / mediaH);
           const drawW = mediaW * fitScale;
           const drawH = mediaH * fitScale;
-          offCtx.drawImage(el, (width - drawW) / 2, (height - drawH) / 2, drawW, drawH);
+          targetCtx.drawImage(el, (width - drawW) / 2, (height - drawH) / 2, drawW, drawH);
         }
-      }
-
-      if (clip.chromaKey.enabled) {
-        applyChromaKeyBuffer(
-          offCtx,
-          width,
-          height,
-          clip.chromaKey.targetHex,
-          clip.chromaKey.similarity,
-          clip.chromaKey.smoothness
-        );
-      }
-
-      if (clip.effect && clip.effect.type !== 'none') {
-        applyVideoEffectPass(
-          offCtx,
-          width,
-          height,
-          clip.effect.type,
-          clip.effect.intensity,
-          localTime
-        );
-      }
-
-      // Compute Transition-In Transform & Flash
-      let transScale = 1;
-      let transX = 0;
-      let transY = 0;
-      let transRot = 0;
-      let transAlpha = 1;
-      let flashWhite = 0;
-      let fadeBlack = 0;
-      let circleClipRadius: number | null = null;
-      let diamondClipRadius: number | null = null;
-
-      if (clip.transitionIn && clip.transitionIn.type !== 'none') {
-        const dur = Math.max(0.15, clip.transitionIn.durationSec);
-        if (localTime < dur) {
-          const p = cubicEaseInOut(localTime / dur);
-          const tType = clip.transitionIn.type;
-          if (tType === 'dissolve') {
-            transAlpha = p;
-          } else if (tType === 'zoom-in') {
-            transScale = 2.05 - p * 1.05;
-            transAlpha = Math.min(1, p * 1.4);
-          } else if (tType === 'zoom-out') {
-            transScale = 0.42 + p * 0.58;
-            transAlpha = Math.min(1, p * 1.3);
-          } else if (tType === 'slide-left') {
-            transX = (1 - p) * width;
-          } else if (tType === 'slide-up') {
-            transY = (1 - p) * height;
-          } else if (tType === 'spin-cut') {
-            transRot = (1 - p) * 220;
-            transScale = 0.52 + p * 0.48;
-            transAlpha = Math.min(1, p * 1.4);
-          } else if (tType === 'circle-wipe') {
-            circleClipRadius = p * Math.hypot(width / 2, height / 2);
-          } else if (tType === 'diamond-wipe') {
-            diamondClipRadius = p * (width + height) * 0.65;
-          } else if (tType === 'flash-white') {
-            flashWhite = Math.pow(1 - p, 0.75);
-            transScale = 1 + (1 - p) * 0.14;
-          } else if (tType === 'fade-black') {
-            fadeBlack = 1 - p;
-          } else if (tType === 'glitch-cut') {
-            transX = Math.sin(localTime * 110) * 38 * (1 - p);
-            flashWhite = (1 - p) * 0.25;
-          }
-        }
-      }
-
-      // Shake / Zoom-Pulse / Hyper-Zoom clip-level motion effects
-      let shakeX = 0;
-      let shakeY = 0;
-      let pulseScale = 1;
-      if (clip.effect?.type === 'shake-impact') {
-        const s = (clip.effect.intensity / 100) * 22;
-        shakeX = Math.sin(localTime * 46) * s;
-        shakeY = Math.cos(localTime * 41) * s;
-      } else if (clip.effect?.type === 'zoom-pulse') {
-        pulseScale = 1 + Math.abs(Math.sin(localTime * 6)) * 0.16 * (clip.effect.intensity / 100);
-      } else if (clip.effect?.type === 'motion-blur-zoom') {
-        pulseScale = 1 + ((localTime * 1.4) % 1) * 0.18 * (clip.effect.intensity / 100);
-      }
-
-      const cropLeft = ((clip.crop?.left ?? 0) / 100) * width;
-      const cropRight = ((clip.crop?.right ?? 0) / 100) * width;
-      const cropTop = ((clip.crop?.top ?? 0) / 100) * height;
-      const cropBottom = ((clip.crop?.bottom ?? 0) / 100) * height;
-      const hasCrop = cropLeft > 0 || cropRight > 0 || cropTop > 0 || cropBottom > 0;
-
-      ctx.save();
-      ctx.globalAlpha = Math.max(0, Math.min(1, transform.opacity * transAlpha));
-      ctx.translate(
-        width / 2 + (transform.x / 100) * width + transX + shakeX,
-        height / 2 + (transform.y / 100) * height + transY + shakeY
-      );
-      ctx.rotate(((transform.rotation + transRot) * Math.PI) / 180);
-      ctx.scale(transform.scale * transScale * pulseScale, transform.scale * transScale * pulseScale);
-
-      if (circleClipRadius !== null) {
-        ctx.beginPath();
-        ctx.arc(0, 0, Math.max(1, circleClipRadius), 0, Math.PI * 2);
-        ctx.clip();
-      }
-
-      if (diamondClipRadius !== null) {
-        const r = Math.max(2, diamondClipRadius);
-        ctx.beginPath();
-        ctx.moveTo(0, -r);
-        ctx.lineTo(r, 0);
-        ctx.lineTo(0, r);
-        ctx.lineTo(-r, 0);
-        ctx.closePath();
-        ctx.clip();
-      }
-
-      if (hasCrop) {
-        const cw = Math.max(8, width - cropLeft - cropRight);
-        const ch = Math.max(8, height - cropTop - cropBottom);
-        ctx.beginPath();
-        ctx.rect(-width / 2 + cropLeft, -height / 2 + cropTop, cw, ch);
-        ctx.clip();
-      }
-
-      ctx.drawImage(offscreen, -width / 2, -height / 2, width, height);
-
-      if (circleClipRadius !== null) {
-        ctx.strokeStyle = '#00CAE0';
-        ctx.lineWidth = 6;
-        ctx.beginPath();
-        ctx.arc(0, 0, Math.max(1, circleClipRadius), 0, Math.PI * 2);
-        ctx.stroke();
-      }
-
-      if (diamondClipRadius !== null) {
-        const r = Math.max(2, diamondClipRadius);
-        ctx.strokeStyle = '#FBBF24';
-        ctx.lineWidth = 6;
-        ctx.beginPath();
-        ctx.moveTo(0, -r);
-        ctx.lineTo(r, 0);
-        ctx.lineTo(0, r);
-        ctx.lineTo(-r, 0);
-        ctx.closePath();
-        ctx.stroke();
-      }
-
-      ctx.restore();
-
-      if (flashWhite > 0.02) {
-        ctx.save();
-        ctx.fillStyle = `rgba(255, 255, 255, ${flashWhite})`;
-        ctx.fillRect(0, 0, width, height);
-        ctx.restore();
-      }
-
-      if (fadeBlack > 0.02) {
-        ctx.save();
-        ctx.fillStyle = `rgba(0, 0, 0, ${fadeBlack})`;
-        ctx.fillRect(0, 0, width, height);
-        ctx.restore();
       }
     }
+  } catch {
+    // Isolate any broken media draw cleanly without crashing studio loop
+  }
+
+  if (clip.chromaKey.enabled) {
+    try {
+      applyChromaKeyBuffer(
+        targetCtx,
+        width,
+        height,
+        clip.chromaKey.targetHex,
+        clip.chromaKey.similarity,
+        clip.chromaKey.smoothness
+      );
+    } catch {
+      // ignore if CORS-tainted external image
+    }
+  }
+
+  if (clip.effect && clip.effect.type !== 'none') {
+    let appliedGl = false;
+    try {
+      appliedGl = applyWebGlEffectPass(
+        targetCtx,
+        targetCanvas,
+        clip.effect.type,
+        clip.effect.intensity,
+        localTime
+      );
+    } catch {
+      appliedGl = false;
+    }
+    if (!appliedGl) {
+      apply2dFallbackEffect(
+        targetCtx,
+        width,
+        height,
+        clip.effect.type,
+        clip.effect.intensity,
+        localTime
+      );
+    }
+  }
+
+  let shakeX = 0;
+  let shakeY = 0;
+  let pulseScale = 1;
+  if (clip.effect?.type === 'shake-impact') {
+    const s = (clip.effect.intensity / 100) * 22;
+    shakeX = Math.sin(localTime * 46) * s;
+    shakeY = Math.cos(localTime * 41) * s;
+  } else if (clip.effect?.type === 'zoom-pulse') {
+    pulseScale = 1 + Math.abs(Math.sin(localTime * 6)) * 0.16 * (clip.effect.intensity / 100);
+  } else if (clip.effect?.type === 'motion-blur-zoom') {
+    pulseScale = 1 + ((localTime * 1.4) % 1) * 0.14 * (clip.effect.intensity / 100);
+  } else if (clip.effect?.type === 'heartbeat-pump') {
+    const beat = Math.pow(Math.abs(Math.sin(localTime * 4.5)), 6);
+    pulseScale = 1 + beat * 0.22 * (clip.effect.intensity / 100);
+  } else if (clip.effect?.type === 'whiplash-pan') {
+    const s = (clip.effect.intensity / 100) * 28;
+    shakeX = Math.sin(localTime * 3.4) * s;
+    shakeY = Math.cos(localTime * 2.1) * (s * 0.45);
+    pulseScale = 1.06;
+  }
+
+  const cropLeft = ((clip.crop?.left ?? 0) / 100) * width;
+  const cropRight = ((clip.crop?.right ?? 0) / 100) * width;
+  const cropTop = ((clip.crop?.top ?? 0) / 100) * height;
+  const cropBottom = ((clip.crop?.bottom ?? 0) / 100) * height;
+  const hasCrop = cropLeft > 0 || cropRight > 0 || cropTop > 0 || cropBottom > 0;
+
+  return {
+    localTime,
+    transform,
+    shakeX,
+    shakeY,
+    pulseScale,
+    hasCrop,
+    cropLeft,
+    cropTop,
+    cropRight,
+    cropBottom,
+  };
+}
+
+function drawTransformedBuffer(
+  destCtx: CanvasRenderingContext2D,
+  srcCanvas: HTMLCanvasElement,
+  width: number,
+  height: number,
+  info: ReturnType<typeof renderClipRawToCanvas>,
+  alphaOverride = 1
+) {
+  destCtx.save();
+  destCtx.globalAlpha = Math.max(0, Math.min(1, info.transform.opacity * alphaOverride));
+  destCtx.translate(
+    width / 2 + (info.transform.x / 100) * width + info.shakeX,
+    height / 2 + (info.transform.y / 100) * height + info.shakeY
+  );
+  destCtx.rotate((info.transform.rotation * Math.PI) / 180);
+  destCtx.scale(info.transform.scale * info.pulseScale, info.transform.scale * info.pulseScale);
+
+  if (info.hasCrop) {
+    const cw = Math.max(8, width - info.cropLeft - info.cropRight);
+    const ch = Math.max(8, height - info.cropTop - info.cropBottom);
+    destCtx.beginPath();
+    destCtx.rect(-width / 2 + info.cropLeft, -height / 2 + info.cropTop, cw, ch);
+    destCtx.clip();
+  }
+
+  destCtx.drawImage(srcCanvas, -width / 2, -height / 2, width, height);
+  destCtx.restore();
+}
+
+export function renderCompositeFrame(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  project: ProjectState,
+  mediaElements: Map<string, HTMLVideoElement | HTMLImageElement | HTMLAudioElement>,
+  timeSec: number
+): void {
+  try {
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = '#060608';
+    ctx.fillRect(0, 0, width, height);
+
+    const visualTracks = project.tracks.filter((t) => t.type !== 'audio' && !t.hidden);
+
+    for (const track of visualTracks) {
+      const trackClips = project.clips
+        .filter((c) => c.trackId === track.id)
+        .sort((a, b) => a.startSec - b.startSec);
+
+      const activeClips = trackClips.filter(
+        (c) => timeSec >= c.startSec && timeSec <= c.startSec + c.durationSec
+      );
+
+      for (const clip of activeClips) {
+        try {
+          const { canvas: offscreen, ctx: offCtx } = getOffscreenTarget(
+            width,
+            height,
+            clip.chromaKey.enabled
+          );
+          if (!offCtx) continue;
+
+          const info = renderClipRawToCanvas(
+            offCtx,
+            offscreen,
+            width,
+            height,
+            clip,
+            mediaElements,
+            timeSec
+          );
+
+          // Check real GitHub gl-transitions GLSL cut shader
+          const hasGlTrans =
+            clip.transitionIn &&
+            clip.transitionIn.type !== 'none' &&
+            info.localTime < Math.max(0.15, clip.transitionIn.durationSec);
+
+          if (hasGlTrans && clip.transitionIn) {
+            const dur = Math.max(0.15, clip.transitionIn.durationSec);
+            const progress = cubicEaseInOut(info.localTime / dur);
+            const { fromCanvas, fromCtx, toCanvas, toCtx } = getTransitionBuffers(width, height);
+
+            if (fromCtx && toCtx) {
+              fromCtx.clearRect(0, 0, width, height);
+              if (track.type === 'video') {
+                fromCtx.fillStyle = '#060608';
+                fromCtx.fillRect(0, 0, width, height);
+                const idx = trackClips.findIndex((c) => c.id === clip.id);
+                const prevClip = idx > 0 ? trackClips[idx - 1] : null;
+                if (prevClip) {
+                  const prevInfo = renderClipRawToCanvas(
+                    offCtx,
+                    offscreen,
+                    width,
+                    height,
+                    prevClip,
+                    mediaElements,
+                    prevClip.startSec + Math.max(0, prevClip.durationSec - 0.03)
+                  );
+                  drawTransformedBuffer(fromCtx, offscreen, width, height, prevInfo);
+                  // Re-render current clip into offscreen cleanly
+                  renderClipRawToCanvas(
+                    offCtx,
+                    offscreen,
+                    width,
+                    height,
+                    clip,
+                    mediaElements,
+                    timeSec
+                  );
+                }
+              }
+
+              toCtx.clearRect(0, 0, width, height);
+              if (track.type === 'video') {
+                toCtx.fillStyle = '#060608';
+                toCtx.fillRect(0, 0, width, height);
+              }
+              drawTransformedBuffer(toCtx, offscreen, width, height, info);
+
+              let glOut: HTMLCanvasElement | null = null;
+              try {
+                glOut = renderGlTransitionFrame(
+                  clip.transitionIn.type,
+                  fromCanvas,
+                  toCanvas,
+                  progress,
+                  width,
+                  height
+                );
+              } catch {
+                glOut = null;
+              }
+
+              if (glOut) {
+                ctx.drawImage(glOut, 0, 0, width, height);
+                continue;
+              } else {
+                drawTransformedBuffer(ctx, offscreen, width, height, info, progress);
+                continue;
+              }
+            }
+          }
+
+          drawTransformedBuffer(ctx, offscreen, width, height, info);
+        } catch {
+          // Single-clip error isolation: keep rendering remaining layers
+        }
+      }
+    }
+  } catch {
+    // Master safety catch so animation frame loop never terminates
   }
 }

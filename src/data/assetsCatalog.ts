@@ -1,3 +1,5 @@
+import { saveCustomFontBlobToDraftDb } from '../engine/draftStorage';
+import { getAvailableGlTransitions } from '../engine/glTransitionRenderer';
 import {
   TextAnimationType,
   TextStylePreset,
@@ -14,7 +16,7 @@ export interface FontCatalogItem {
 
 export const GOOGLE_FONT_CATALOG: FontCatalogItem[] = [
   { name: 'Bebas Neue', category: 'Cinematic', googleFamily: 'Bebas+Neue', previewText: 'EPIC INTRO' },
-  { name: 'Anton', category: 'Meme', googleFamily: 'Anton', previewText: 'TOP TEXT' },
+  { name: 'Anton', category: 'Meme', googleFamily: 'Anton', previewText: 'MRBEAST POP' },
   { name: 'Bangers', category: 'Meme', googleFamily: 'Bangers', previewText: 'BOOM!' },
   { name: 'Orbitron', category: 'Gaming', googleFamily: 'Orbitron:wght@700;900', previewText: 'CLUTCH 4K' },
   { name: 'Black Ops One', category: 'Gaming', googleFamily: 'Black+Ops+One', previewText: 'VICTORY' },
@@ -87,7 +89,6 @@ export async function installGoogleFontByInput(input: string): Promise<string> {
   try {
     await document.fonts.load(`700 40px "${familyName}"`);
   } catch {
-    // Allow fallback even if weight 700 isn't present
     await document.fonts.load(`400 40px "${familyName}"`).catch(() => undefined);
   }
   loadedFontSet.add(familyName);
@@ -98,19 +99,21 @@ export async function installLocalFontFile(file: File): Promise<string> {
   if (/\.zip$/i.test(file.name)) {
     const { extractFontFromZip } = await import('../engine/zipFontExtractor');
     const extracted = await extractFontFromZip(file);
-    const fontFace = new FontFace(extracted.name, extracted.buffer);
+    const fontFace = new FontFace(extracted.name, extracted.buffer.slice(0));
     const loaded = await fontFace.load();
     document.fonts.add(loaded);
     loadedFontSet.add(extracted.name);
+    void saveCustomFontBlobToDraftDb(extracted.name, extracted.buffer.slice(0));
     return extracted.name;
   }
 
   const cleanName = file.name.replace(/\.(ttf|otf|woff2?|TTF|OTF|WOFF2?)$/, '');
   const buffer = await file.arrayBuffer();
-  const fontFace = new FontFace(cleanName, buffer);
+  const fontFace = new FontFace(cleanName, buffer.slice(0));
   const loaded = await fontFace.load();
   document.fonts.add(loaded);
   loadedFontSet.add(cleanName);
+  void saveCustomFontBlobToDraftDb(cleanName, buffer.slice(0));
   return cleanName;
 }
 
@@ -122,50 +125,286 @@ export const TEXT_STYLE_PRESETS: {
   { id: 'outline', label: 'Bold Stroke', desc: 'Viral thick outline' },
   { id: 'neon-glow', label: 'Neon Bloom', desc: 'Glowing aura' },
   { id: 'cyber-box', label: 'Caption Card', desc: 'Crisp HUD bar' },
-  { id: 'gradient-fire', label: 'Gradient', desc: 'Cyan / Gold fill' },
+  { id: 'gradient-fire', label: 'Gradient', desc: 'Dual gradient fill' },
   { id: '3d-pop', label: '3D Extrude', desc: 'Depth block pop' },
   { id: 'clean', label: 'Clean Shadow', desc: 'Minimal soft drop' },
 ];
 
-export const VIDEO_EFFECTS: { id: VideoEffectType; label: string; desc: string }[] = [
-  { id: 'none', label: 'Original', desc: 'No effect' },
-  { id: 'rgb-glitch', label: 'RGB Glitch', desc: 'Chromatic tear' },
-  { id: 'cyber-prism', label: 'Prism Sweep', desc: 'Neon light leak' },
-  { id: 'motion-blur-zoom', label: 'Hyper Zoom', desc: 'Radial speed punch' },
-  { id: 'shake-impact', label: 'Shake Cam', desc: 'Bass impact shake' },
-  { id: 'vhs-retro', label: 'VHS Tape', desc: 'CRT tracking wave' },
-  { id: 'neon-flash', label: 'Beat Flash', desc: 'Strobe exposure' },
-  { id: 'zoom-pulse', label: 'Beat Pulse', desc: 'Rhythm bounce' },
-  { id: 'edge-glow', label: 'Neon Border', desc: 'Cyan frame glow' },
-  { id: 'cinematic-teal', label: 'Teal & Gold', desc: 'Hollywood LUT' },
-  { id: 'vignette', label: 'Cinema Vignette', desc: 'Dark focus edge' },
-  { id: 'bw-contrast', label: 'Noir B&W', desc: 'High contrast mono' },
-  { id: 'warm-gold', label: 'Golden Hour', desc: 'Warm film tone' },
+export interface CreatorTextRecipe {
+  id: string;
+  label: string;
+  previewColor1: string;
+  previewColor2: string;
+  fontFamily: string;
+  patch: {
+    textStyle: TextStylePreset;
+    textColor: string;
+    textGradientEnabled: boolean;
+    textGradientColor1: string;
+    textGradientColor2: string;
+    textGradientAngle: number;
+    textStrokeColor: string;
+    textStrokeWidth: number;
+    textShadowColor: string;
+    textShadowBlur: number;
+    textShadowOffsetX: number;
+    textShadowOffsetY: number;
+    textBgEnabled: boolean;
+    textBgColor: string;
+    textUppercase: boolean;
+  };
+}
+
+export const CREATOR_TEXT_RECIPES: CreatorTextRecipe[] = [
+  {
+    id: 'mrbeast-gold',
+    label: 'MrBeast Gold',
+    previewColor1: '#FFE600',
+    previewColor2: '#FF7A00',
+    fontFamily: 'Anton',
+    patch: {
+      textStyle: 'outline',
+      textColor: '#FFE600',
+      textGradientEnabled: true,
+      textGradientColor1: '#FFF04D',
+      textGradientColor2: '#FF8A00',
+      textGradientAngle: 90,
+      textStrokeColor: '#000000',
+      textStrokeWidth: 16,
+      textShadowColor: 'rgba(0,0,0,0.95)',
+      textShadowBlur: 0,
+      textShadowOffsetX: 4,
+      textShadowOffsetY: 7,
+      textBgEnabled: false,
+      textBgColor: '#000000',
+      textUppercase: true,
+    },
+  },
+  {
+    id: 'hormozi-green',
+    label: 'Viral Cash',
+    previewColor1: '#4ADE80',
+    previewColor2: '#00CAE0',
+    fontFamily: 'Montserrat',
+    patch: {
+      textStyle: 'outline',
+      textColor: '#34D399',
+      textGradientEnabled: true,
+      textGradientColor1: '#6EE7B7',
+      textGradientColor2: '#00CAE0',
+      textGradientAngle: 90,
+      textStrokeColor: '#000000',
+      textStrokeWidth: 14,
+      textShadowColor: 'rgba(0,0,0,0.9)',
+      textShadowBlur: 10,
+      textShadowOffsetX: 0,
+      textShadowOffsetY: 6,
+      textBgEnabled: false,
+      textBgColor: '#000000',
+      textUppercase: true,
+    },
+  },
+  {
+    id: 'fire-reel',
+    label: 'Hyper Fire',
+    previewColor1: '#FF4D4D',
+    previewColor2: '#FBBF24',
+    fontFamily: 'Bangers',
+    patch: {
+      textStyle: 'outline',
+      textColor: '#FF4D4D',
+      textGradientEnabled: true,
+      textGradientColor1: '#FFF500',
+      textGradientColor2: '#FF2A54',
+      textGradientAngle: 90,
+      textStrokeColor: '#120309',
+      textStrokeWidth: 15,
+      textShadowColor: 'rgba(255,42,84,0.65)',
+      textShadowBlur: 18,
+      textShadowOffsetX: 0,
+      textShadowOffsetY: 5,
+      textBgEnabled: false,
+      textBgColor: '#000000',
+      textUppercase: true,
+    },
+  },
+  {
+    id: 'cyber-glow',
+    label: 'Cyber Neon',
+    previewColor1: '#FFFFFF',
+    previewColor2: '#00CAE0',
+    fontFamily: 'Orbitron',
+    patch: {
+      textStyle: 'neon-glow',
+      textColor: '#00CAE0',
+      textGradientEnabled: true,
+      textGradientColor1: '#FFFFFF',
+      textGradientColor2: '#00CAE0',
+      textGradientAngle: 90,
+      textStrokeColor: '#003C47',
+      textStrokeWidth: 6,
+      textShadowColor: '#00CAE0',
+      textShadowBlur: 28,
+      textShadowOffsetX: 0,
+      textShadowOffsetY: 0,
+      textBgEnabled: false,
+      textBgColor: '#000000',
+      textUppercase: true,
+    },
+  },
+  {
+    id: 'reel-box',
+    label: 'Caption Box',
+    previewColor1: '#FFFFFF',
+    previewColor2: '#E4E4EA',
+    fontFamily: 'Poppins',
+    patch: {
+      textStyle: 'cyber-box',
+      textColor: '#FFFFFF',
+      textGradientEnabled: false,
+      textGradientColor1: '#FFFFFF',
+      textGradientColor2: '#00CAE0',
+      textGradientAngle: 90,
+      textStrokeColor: '#000000',
+      textStrokeWidth: 0,
+      textShadowColor: 'rgba(0,0,0,0.45)',
+      textShadowBlur: 8,
+      textShadowOffsetX: 0,
+      textShadowOffsetY: 2,
+      textBgEnabled: true,
+      textBgColor: '#0B0B10',
+      textUppercase: false,
+    },
+  },
 ];
 
-export const CLIP_TRANSITIONS: { id: TransitionType; label: string }[] = [
-  { id: 'none', label: 'None' },
-  { id: 'flash-white', label: 'White Flash' },
-  { id: 'glitch-cut', label: 'Glitch Cut' },
-  { id: 'spin-cut', label: 'Whip Spin' },
-  { id: 'zoom-in', label: 'Zoom Pull' },
-  { id: 'zoom-out', label: 'Zoom Out' },
-  { id: 'slide-left', label: 'Whip Left' },
-  { id: 'slide-up', label: 'Swipe Up' },
-  { id: 'circle-wipe', label: 'Iris Portal' },
-  { id: 'diamond-wipe', label: 'Diamond Cut' },
-  { id: 'dissolve', label: 'Mix Dissolve' },
-  { id: 'fade-black', label: 'Black Fade' },
+export type EffectCategory =
+  | 'All'
+  | 'Glitch & Cyber'
+  | 'Lens & Warp'
+  | 'Glow & Neon'
+  | 'Motion'
+  | 'Film LUTs';
+
+export interface VideoEffectCatalogItem {
+  id: VideoEffectType;
+  label: string;
+  desc: string;
+  category: Exclude<EffectCategory, 'All'>;
+}
+
+export const VIDEO_EFFECTS: VideoEffectCatalogItem[] = [
+  { id: 'none', label: 'Original', desc: 'Raw frame', category: 'Film LUTs' },
+  // Glitch & Cyber
+  { id: 'rgb-glitch', label: 'RGB Glitch', desc: 'WebGL tear split', category: 'Glitch & Cyber' },
+  { id: 'chromatic-aberration', label: 'RGB Prism Edge', desc: 'Optic fringe', category: 'Glitch & Cyber' },
+  { id: 'vhs-retro', label: 'VHS CRT', desc: 'Analog tape wave', category: 'Glitch & Cyber' },
+  { id: 'crt-scanlines', label: 'CRT Tube', desc: 'Curved scanline', category: 'Glitch & Cyber' },
+  { id: 'data-mosh', label: 'Data Mosh', desc: 'Codec block shift', category: 'Glitch & Cyber' },
+  { id: 'tv-static', label: 'TV Static', desc: 'Broadcast snow', category: 'Glitch & Cyber' },
+  { id: 'cyber-matrix', label: 'Matrix Rain', desc: 'Digital cascade', category: 'Glitch & Cyber' },
+  { id: 'halftone-pixel', label: 'Pixelate 8-Bit', desc: 'Block mosaic', category: 'Glitch & Cyber' },
+  // Lens & Warp
+  { id: 'kaleidoscope', label: 'Kaleidoscope 6x', desc: '6-fold mirror', category: 'Lens & Warp' },
+  { id: 'kaleido-8', label: 'Kaleido 8x', desc: '8-fold crystal', category: 'Lens & Warp' },
+  { id: 'bulge-fisheye', label: 'Bulge Fisheye', desc: 'Wide punch lens', category: 'Lens & Warp' },
+  { id: 'pinch-warp', label: 'Pinch Warp', desc: 'Suck-in optic', category: 'Lens & Warp' },
+  { id: 'swirl-vortex', label: 'Swirl Vortex', desc: 'Spiral twist', category: 'Lens & Warp' },
+  { id: 'mirror-split', label: 'Mirror Split', desc: 'Symmetry cut', category: 'Lens & Warp' },
+  { id: 'mirror-quad', label: 'Quad Mirror', desc: '4-way prism', category: 'Lens & Warp' },
+  { id: 'wave-ripple', label: 'Shockwave', desc: 'Water ripple', category: 'Lens & Warp' },
+  { id: 'mosaic-blur', label: 'Dream Blur', desc: 'Soft lens defocus', category: 'Lens & Warp' },
+  // Motion
+  { id: 'motion-blur-zoom', label: 'Hyper Zoom', desc: '12-tap radial blur', category: 'Motion' },
+  { id: 'radial-blur', label: 'Spin Blur', desc: 'Whip rotation blur', category: 'Motion' },
+  { id: 'shake-impact', label: 'Shake Cam', desc: 'Bass impact shake', category: 'Motion' },
+  { id: 'zoom-pulse', label: 'Beat Pulse', desc: 'Rhythm zoom', category: 'Motion' },
+  { id: 'heartbeat-pump', label: 'Bass Pump', desc: 'Sub-drop punch', category: 'Motion' },
+  { id: 'whiplash-pan', label: 'Whiplash Sway', desc: 'Camera drift', category: 'Motion' },
+  // Glow & Neon
+  { id: 'neon-edges', label: 'Neon Edges', desc: 'Sobel edge trace', category: 'Glow & Neon' },
+  { id: 'cyber-prism', label: 'Prism Sweep', desc: 'Light leak beam', category: 'Glow & Neon' },
+  { id: 'bloom-aura', label: 'Pro Bloom', desc: 'Highlight halo', category: 'Glow & Neon' },
+  { id: 'neon-flash', label: 'Beat Flash', desc: 'Strobe exposure', category: 'Glow & Neon' },
+  { id: 'laser-grid', label: 'Laser Scanner', desc: 'HUD grid sweep', category: 'Glow & Neon' },
+  { id: 'edge-glow', label: 'Cyber Border', desc: 'Cyan edge bloom', category: 'Glow & Neon' },
+  { id: 'thermal-heat', label: 'Thermal IR', desc: 'Predator heat', category: 'Glow & Neon' },
+  { id: 'xray-invert', label: 'X-Ray Invert', desc: 'Negative shock', category: 'Glow & Neon' },
+  { id: 'solarize', label: 'Solarize', desc: 'Metallic invert', category: 'Glow & Neon' },
+  // Film LUTs
+  { id: 'cinematic-teal', label: 'Teal & Orange', desc: 'Hollywood LUT', category: 'Film LUTs' },
+  { id: 'warm-gold', label: 'Golden Hour', desc: 'Warm sunset LUT', category: 'Film LUTs' },
+  { id: 'cyberpunk-pink', label: 'Night Neon', desc: 'Violet-pink grade', category: 'Film LUTs' },
+  { id: 'emerald-matrix', label: 'Emerald Grade', desc: 'Moody green LUT', category: 'Film LUTs' },
+  { id: 'sunset-glow', label: 'Sunset Gradient', desc: 'Amber rose sky', category: 'Film LUTs' },
+  { id: 'night-vision', label: 'Night Vision', desc: 'Tactical green', category: 'Film LUTs' },
+  { id: 'bw-contrast', label: 'Noir B&W', desc: 'Crisp mono LUT', category: 'Film LUTs' },
+  { id: 'deep-contrast', label: 'Punch HDR', desc: 'Creator contrast', category: 'Film LUTs' },
+  { id: 'sepia-vintage', label: '90s Vintage', desc: 'Warm sepia film', category: 'Film LUTs' },
+  { id: 'fade-film', label: 'Matte Film', desc: 'Lifted shadows', category: 'Film LUTs' },
+  { id: 'vignette', label: 'Cinema Vignette', desc: 'Focus edge dark', category: 'Film LUTs' },
 ];
 
-export const TEXT_ANIMATIONS: { id: TextAnimationType; label: string }[] = [
-  { id: 'none', label: 'Static' },
-  { id: 'pop-bounce', label: 'Pop Bounce' },
-  { id: 'typewriter', label: 'Typewriter' },
-  { id: 'slide-up', label: 'Slide Up' },
-  { id: 'glitch-flicker', label: 'Glitch' },
-  { id: 'neon-pulse', label: 'Glow Pulse' },
-  { id: 'zoom-reveal', label: 'Zoom In' },
+export type TransitionCategory =
+  | 'All'
+  | 'Glitch & TV'
+  | 'Zoom & Spin'
+  | '3D & Flip'
+  | 'Wipe & Split'
+  | 'Burn & Glow'
+  | 'Dissolve';
+
+export interface TransitionCatalogItem {
+  id: TransitionType;
+  label: string;
+  author?: string;
+  category: Exclude<TransitionCategory, 'All'>;
+}
+
+const formatGlName = (raw: string): string =>
+  raw.replace(/([a-z])([A-Z])/g, '$1 $2').trim();
+
+function categorizeGlTransition(name: string): Exclude<TransitionCategory, 'All'> {
+  const n = name.toLowerCase();
+  if (/glitch|tv|vhs|static|datamosh|ascii|scan|code|pixel/.test(n)) return 'Glitch & TV';
+  if (/zoom|spin|whip|swirl|vortex|warp|pinwheel|shake|ripple|shockwave|gravity/.test(n))
+    return 'Zoom & Spin';
+  if (/cube|flip|fold|page|roll|book|card|door|curtain|domino|tumble|sphere|puzzle/.test(n))
+    return '3D & Flip';
+  if (/burn|flame|flash|light|flare|glow|bloom|overexposure|ink|vaporize|shatter|melt|smoke/.test(n))
+    return 'Burn & Glow';
+  if (/wipe|slice|blind|split|cover|slide|chess|grid|comb|honeycomb|iris|heart|star|plus|circle/.test(n))
+    return 'Wipe & Split';
+  return 'Dissolve';
+}
+
+export const CLIP_TRANSITIONS: TransitionCatalogItem[] = [
+  { id: 'none', label: 'None', author: 'Cut', category: 'Dissolve' },
+  ...getAvailableGlTransitions().map((entry) => ({
+    id: entry.name as TransitionType,
+    label: formatGlName(entry.name),
+    author: entry.author || 'gl-transitions',
+    category: categorizeGlTransition(entry.name),
+  })),
+];
+
+export const TEXT_ANIMATIONS: {
+  id: TextAnimationType;
+  label: string;
+  animateClass: string;
+}[] = [
+  { id: 'none', label: 'Static', animateClass: '' },
+  { id: 'bounceIn', label: 'Bounce In', animateClass: 'animate__bounceIn' },
+  { id: 'rubberBand', label: 'Rubber Band', animateClass: 'animate__rubberBand' },
+  { id: 'tada', label: 'Tada Pop', animateClass: 'animate__tada' },
+  { id: 'jello', label: 'Jello Jelly', animateClass: 'animate__jello' },
+  { id: 'jackInTheBox', label: 'Jack In Box', animateClass: 'animate__jackInTheBox' },
+  { id: 'backInUp', label: 'Back In Up', animateClass: 'animate__backInUp' },
+  { id: 'zoomInDown', label: 'Zoom Drop', animateClass: 'animate__zoomInDown' },
+  { id: 'flipInX', label: '3D Flip X', animateClass: 'animate__flipInX' },
+  { id: 'lightSpeedInRight', label: 'Light Speed', animateClass: 'animate__lightSpeedInRight' },
+  { id: 'typewriter', label: 'Typewriter', animateClass: '' },
+  { id: 'glitch-flicker', label: 'Glitch', animateClass: 'animate__headShake' },
 ];
 
 export interface StockClipPreset {
@@ -192,48 +431,14 @@ export const STOCK_CLIPS: StockClipPreset[] = [
 export interface MemeLibraryItem {
   id: string;
   title: string;
-  category: 'Trending' | 'Gaming' | 'Reaction' | 'Green Screen' | 'Sound FX';
-  kind: 'visual' | 'sfx';
-  topText?: string;
-  bottomText?: string;
+  category: 'Sound FX';
+  kind: 'sfx';
   accentHex: string;
-  chromaGreen?: boolean;
-  sfxId?: string;
+  sfxId: string;
   durationSec: number;
 }
 
 export const MEME_LIBRARY: MemeLibraryItem[] = [
-  // Trending Memes
-  { id: 'meme-emotional', title: 'Emotional Damage', category: 'Trending', kind: 'visual', topText: 'EMOTIONAL', bottomText: 'DAMAGE!', accentHex: '#EF4444', durationSec: 2.8 },
-  { id: 'meme-let-him-cook', title: 'Let Him Cook', category: 'Trending', kind: 'visual', topText: 'HOLD UP...', bottomText: 'LET HIM COOK', accentHex: '#F59E0B', durationSec: 3.0 },
-  { id: 'meme-bro-what', title: 'Bro What??', category: 'Trending', kind: 'visual', topText: 'BRO', bottomText: 'WHAT?!', accentHex: '#38BDF8', durationSec: 2.2 },
-  { id: 'meme-mission-failed', title: 'Mission Failed', category: 'Trending', kind: 'visual', topText: 'MISSION FAILED', bottomText: 'NEXT TIME', accentHex: '#94A3B8', durationSec: 3.0 },
-  { id: 'meme-to-be-continued', title: 'To Be Continued', category: 'Trending', kind: 'visual', topText: 'TO BE', bottomText: 'CONTINUED ->', accentHex: '#FBBF24', durationSec: 3.2 },
-  { id: 'meme-gigachad', title: 'Sigma Aura', category: 'Trending', kind: 'visual', topText: 'SIGMA', bottomText: 'MOMENT', accentHex: '#E4E4EA', durationSec: 2.8 },
-  { id: 'meme-skill-issue', title: 'Skill Issue', category: 'Trending', kind: 'visual', topText: 'PURE', bottomText: 'SKILL ISSUE', accentHex: '#F472B6', durationSec: 2.4 },
-  { id: 'meme-hold-on', title: 'Wait A Minute', category: 'Trending', kind: 'visual', topText: 'WAIT A', bottomText: 'MINUTE...', accentHex: '#00CAE0', durationSec: 2.5 },
-
-  // Gaming Memes
-  { id: 'meme-1hp', title: 'Literally 1 HP', category: 'Gaming', kind: 'visual', topText: 'ENEMY WAS', bottomText: '1 HP!!', accentHex: '#EF4444', durationSec: 2.5 },
-  { id: 'meme-clutch-god', title: '1v4 Clutch God', category: 'Gaming', kind: 'visual', topText: '1V4 CLUTCH', bottomText: 'UNSTOPPABLE', accentHex: '#34D399', durationSec: 3.0 },
-  { id: 'meme-lag-ping', title: '999ms Ping Spike', category: 'Gaming', kind: 'visual', topText: 'PING: 999MS', bottomText: 'TELEPORTING', accentHex: '#F59E0B', durationSec: 2.6 },
-  { id: 'meme-hacker', title: 'Reported Hacking', category: 'Gaming', kind: 'visual', topText: 'AIMBOT?', bottomText: 'NO JUST SKILL', accentHex: '#A78BFA', durationSec: 2.8 },
-  { id: 'meme-third-party', title: 'Third Party Alert', category: 'Gaming', kind: 'visual', topText: 'WARNING', bottomText: 'THIRD PARTY!', accentHex: '#FB7185', durationSec: 2.4 },
-  { id: 'meme-easy-gg', title: 'GG EZ Clap', category: 'Gaming', kind: 'visual', topText: 'GG', bottomText: 'EZ CLAP', accentHex: '#00CAE0', durationSec: 2.2 },
-
-  // Reaction & Green Screen Overlays
-  { id: 'meme-gs-subscribe', title: 'Green Screen Like & Sub', category: 'Green Screen', kind: 'visual', topText: 'LIKE &', bottomText: 'SUBSCRIBE', accentHex: '#EF4444', chromaGreen: true, durationSec: 3.5 },
-  { id: 'meme-gs-shock', title: 'Green Screen OMG Stamp', category: 'Green Screen', kind: 'visual', topText: 'OMG!!', bottomText: 'NO WAY', accentHex: '#FBBF24', chromaGreen: true, durationSec: 2.5 },
-  { id: 'meme-gs-rec', title: 'Green Screen REC Cam', category: 'Green Screen', kind: 'visual', topText: 'REC', bottomText: 'LIVE CAM', accentHex: '#34D399', chromaGreen: true, durationSec: 4.0 },
-  { id: 'meme-gs-wasted', title: 'Green Screen WASTED', category: 'Green Screen', kind: 'visual', topText: 'WASTED', bottomText: 'KO', accentHex: '#F87171', chromaGreen: true, durationSec: 2.8 },
-
-  // Reaction Stickers
-  { id: 'meme-react-100', title: '100% Certified', category: 'Reaction', kind: 'visual', topText: '100%', bottomText: 'CERTIFIED', accentHex: '#34D399', durationSec: 2.2 },
-  { id: 'meme-react-rip', title: 'RIP Combo', category: 'Reaction', kind: 'visual', topText: 'R.I.P', bottomText: 'RIP BOZO', accentHex: '#94A3B8', durationSec: 2.4 },
-  { id: 'meme-react-brain', title: '200 IQ Play', category: 'Reaction', kind: 'visual', topText: '200 IQ', bottomText: 'BIG BRAIN', accentHex: '#38BDF8', durationSec: 2.6 },
-  { id: 'meme-react-sus', title: 'Kinda Sus', category: 'Reaction', kind: 'visual', topText: 'THAT WAS', bottomText: 'KINDA SUS', accentHex: '#F43F5E', durationSec: 2.4 },
-
-  // Real Playable Sound FX
   { id: 'sfx-vine-boom', title: 'Vine Boom Thud', category: 'Sound FX', kind: 'sfx', accentHex: '#00CAE0', sfxId: 'vine-boom', durationSec: 1.2 },
   { id: 'sfx-airhorn', title: 'MLG Airhorn', category: 'Sound FX', kind: 'sfx', accentHex: '#F59E0B', sfxId: 'airhorn', durationSec: 1.2 },
   { id: 'sfx-bruh-bass', title: 'Bruh Bass Drop', category: 'Sound FX', kind: 'sfx', accentHex: '#A78BFA', sfxId: 'bruh-bass', durationSec: 1.0 },
@@ -277,7 +482,7 @@ export const INTRO_OUTRO_TEMPLATES: IntroOutroTemplate[] = [
     headline: 'THE MONTAGE',
     subline: 'DIRECTED BY TG7',
     stockVariant: 'cinema-bars',
-    textAnimation: 'zoom-reveal',
+    textAnimation: 'zoomInDown',
     fontFamily: 'Bebas Neue',
     colorHex: '#FFFFFF',
     durationSec: 3.5,
@@ -289,7 +494,7 @@ export const INTRO_OUTRO_TEMPLATES: IntroOutroTemplate[] = [
     headline: 'GET READY',
     subline: 'WATCH THIS',
     stockVariant: 'countdown',
-    textAnimation: 'pop-bounce',
+    textAnimation: 'bounceIn',
     fontFamily: 'Black Ops One',
     colorHex: '#FBBF24',
     durationSec: 3.0,
@@ -301,7 +506,7 @@ export const INTRO_OUTRO_TEMPLATES: IntroOutroTemplate[] = [
     headline: 'THANKS FOR WATCHING',
     subline: 'LIKE · SHARE · FOLLOW',
     stockVariant: 'synth-horizon',
-    textAnimation: 'slide-up',
+    textAnimation: 'backInUp',
     fontFamily: 'Bebas Neue',
     colorHex: '#00CAE0',
     durationSec: 3.5,
@@ -330,7 +535,6 @@ export interface ResourceWebsiteItem {
 }
 
 export const RESOURCE_WEBSITES: ResourceWebsiteItem[] = [
-  // Instant Button Meme Sound Websites
   {
     id: 'site-myinstants',
     name: 'MyInstants',
@@ -363,8 +567,6 @@ export const RESOURCE_WEBSITES: ResourceWebsiteItem[] = [
     url: 'https://mixkit.co/free-sound-effects/',
     accentHex: '#FBBF24',
   },
-
-  // Songs & Background Music Websites
   {
     id: 'site-pixabay-music',
     name: 'Pixabay Music',
@@ -389,8 +591,6 @@ export const RESOURCE_WEBSITES: ResourceWebsiteItem[] = [
     url: 'https://mixkit.co/free-stock-music/',
     accentHex: '#F472B6',
   },
-
-  // Meme Videos, VFX & Green Screen Websites
   {
     id: 'site-mixkit-vfx',
     name: 'Mixkit Video & VFX',
@@ -423,8 +623,6 @@ export const RESOURCE_WEBSITES: ResourceWebsiteItem[] = [
     url: 'https://giphy.com/',
     accentHex: '#FBBF24',
   },
-
-  // SVG & Vector Sticker Websites
   {
     id: 'site-svgrepo',
     name: 'SVG Repo',
@@ -435,8 +633,8 @@ export const RESOURCE_WEBSITES: ResourceWebsiteItem[] = [
   },
   {
     id: 'site-iconify',
-    name: 'Iconify Vector Hub',
-    tagline: 'Copy SVG code or download crisp icons',
+    name: 'Iconify GitHub Sets',
+    tagline: '200k+ open-source GitHub vector icons',
     category: 'SVG & Stickers',
     url: 'https://icon-sets.iconify.design/',
     accentHex: '#38BDF8',
@@ -449,8 +647,6 @@ export const RESOURCE_WEBSITES: ResourceWebsiteItem[] = [
     url: 'https://www.flaticon.com/stickers',
     accentHex: '#34D399',
   },
-
-  // Font Websites
   {
     id: 'site-google-fonts',
     name: 'Google Fonts',

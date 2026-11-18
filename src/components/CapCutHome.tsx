@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import {
   Copy,
   Film,
+  Flame,
   FolderOpen,
   Gauge,
   Laugh,
@@ -15,10 +16,16 @@ import {
 } from 'lucide-react';
 import { AspectRatio, ProjectState } from '../types/editor';
 
-export type QuickPresetKind = 'velocity' | 'glitch-intro' | 'chroma-lab' | 'meme-vault';
+export type QuickPresetKind =
+  | 'mrbeast-shorts'
+  | 'velocity'
+  | 'glitch-intro'
+  | 'chroma-lab'
+  | 'meme-vault';
 
 interface CapCutHomeProps {
   projects: ProjectState[];
+  lastSavedAt?: number | null;
   onOpenProject: (projectId: string) => void;
   onOpenNewProjectPicker: (aspectRatio: AspectRatio) => void;
   onCreateBlankProject: (aspectRatio: AspectRatio) => void;
@@ -35,16 +42,23 @@ const PRO_PRESETS: {
   icon: typeof Gauge;
 }[] = [
   {
+    id: 'mrbeast-shorts',
+    title: 'MrBeast Shorts',
+    desc: 'Bold gradient captions + Shake + Zoom cuts',
+    accent: '#FFE600',
+    icon: Flame,
+  },
+  {
     id: 'velocity',
     title: 'Velocity Montage',
-    desc: 'Speed curve ramp + beat zoom',
+    desc: 'Speed curve ramp + beat pulse',
     accent: '#00CAE0',
     icon: Gauge,
   },
   {
     id: 'glitch-intro',
     title: 'Cyber Intro FX',
-    desc: 'Animated title + RGB glitch',
+    desc: 'Animated title + 44 WebGL shaders',
     accent: '#A78BFA',
     icon: Wand2,
   },
@@ -58,14 +72,15 @@ const PRO_PRESETS: {
   {
     id: 'meme-vault',
     title: 'Memes & Sound FX',
-    desc: '30+ memes, SFX & MyInstants',
-    accent: '#FBBF24',
+    desc: 'Soundboard + instant viral SFX',
+    accent: '#F59E0B',
     icon: Laugh,
   },
 ];
 
 export function CapCutHome({
   projects,
+  lastSavedAt,
   onOpenProject,
   onOpenNewProjectPicker,
   onCreateBlankProject,
@@ -105,25 +120,25 @@ export function CapCutHome({
         </button>
       </header>
 
-      <main className="flex-1 overflow-y-auto px-4 sm:px-6 py-5 max-w-5xl w-full mx-auto space-y-7">
+      <main className="flex-1 overflow-y-auto px-4 sm:px-6 py-5 max-w-6xl w-full mx-auto space-y-7">
         {/* VIP Hero Create Banner */}
         <motion.section
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
           aria-label="Create new project"
-          className="relative rounded-2xl bg-gradient-to-br from-[#0F181D] via-[#0B0D12] to-[#08080B] border border-[#1E2E35] p-4 sm:p-5 overflow-hidden shadow-[0_12px_40px_rgba(0,0,0,0.6)]"
+          className="relative rounded-2xl bg-gradient-to-br from-[#0F181D] via-[#0B0D12] to-[#08080B] border border-[#1E2E35] p-5 sm:p-6 overflow-hidden shadow-[0_12px_40px_rgba(0,0,0,0.6)]"
         >
-          <div className="absolute -right-12 -top-12 w-48 h-48 rounded-full bg-[#00CAE0]/12 blur-3xl pointer-events-none" />
+          <div className="absolute -right-12 -top-12 w-56 h-56 rounded-full bg-[#00CAE0]/12 blur-3xl pointer-events-none" />
 
           <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-xs font-mono text-[#00CAE0]">
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>MULTI-TRACK · KEYFRAMES · CHROMA · VELOCITY</span>
+                <span>44 WEBGL FX · 225 GLSL TRANSITIONS · AUTO-DRAFT PROTECTION</span>
               </div>
               <h1 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
-                Create Your Next Edit
+                Create Your Next Viral Edit
               </h1>
               <div className="flex flex-wrap items-center gap-1.5 pt-1">
                 <span className="text-[11px] text-[#8E8E98] mr-1">Canvas:</span>
@@ -161,7 +176,7 @@ export function CapCutHome({
           </div>
         </motion.section>
 
-        {/* Pro Quick-Start Workflows */}
+        {/* Creator Quick-Start Templates */}
         <motion.section
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
@@ -171,11 +186,11 @@ export function CapCutHome({
         >
           <div className="flex items-center justify-between">
             <h2 className="text-xs font-semibold uppercase tracking-wider text-[#8E8E98]">
-              Pro Quick Launch
+              Creator Quick Launch
             </h2>
           </div>
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
             {PRO_PRESETS.map((preset) => {
               const Icon = preset.icon;
               return (
@@ -203,7 +218,7 @@ export function CapCutHome({
           </div>
         </motion.section>
 
-        {/* Visual Projects Grid */}
+        {/* Visual Projects & Drafts Grid */}
         <motion.section
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
@@ -211,10 +226,15 @@ export function CapCutHome({
           aria-label="Your projects"
           className="space-y-3 pb-4"
         >
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <h2 className="text-xs font-semibold uppercase tracking-wider text-[#8E8E98]">
-              Recent Projects ({projects.length})
+              Saved Drafts ({projects.length})
             </h2>
+            {lastSavedAt && (
+              <span className="text-[11px] font-mono text-[#6E6E7C]">
+                Auto-saved locally
+              </span>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

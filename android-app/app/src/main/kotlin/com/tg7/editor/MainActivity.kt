@@ -238,31 +238,59 @@ class MainActivity : AppCompatActivity() {
     }
 
     inner class TG7AndroidBridge {
+        private fun insertVideoIntoGallery(
+            base64Data: String,
+            fileName: String,
+            mimeType: String?
+        ): Uri? {
+            val cleanBase64 = base64Data.substringAfter(",", base64Data)
+            val bytes = Base64.decode(cleanBase64, Base64.DEFAULT)
+            val resolvedMime = when {
+                !mimeType.isNullOrBlank() -> mimeType
+                fileName.endsWith(".mp4", ignoreCase = true) -> "video/mp4"
+                else -> "video/webm"
+            }
+            val values = ContentValues().apply {
+                put(MediaStore.Video.Media.DISPLAY_NAME, fileName)
+                put(MediaStore.Video.Media.MIME_TYPE, resolvedMime)
+                put(
+                    MediaStore.Video.Media.RELATIVE_PATH,
+                    Environment.DIRECTORY_MOVIES + "/TG7 Editor"
+                )
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    put(MediaStore.Video.Media.IS_PENDING, 1)
+                }
+            }
+            val uri = contentResolver.insert(
+                MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                values
+            ) ?: return null
+
+            contentResolver.openOutputStream(uri)?.use { out ->
+                out.write(bytes)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val done = ContentValues().apply {
+                    put(MediaStore.Video.Media.IS_PENDING, 0)
+                }
+                contentResolver.update(uri, done, null, null)
+            }
+            return uri
+        }
+
         @JavascriptInterface
         fun saveVideo(base64Data: String, fileName: String): Boolean {
-            return try {
-                val cleanBase64 = base64Data.substringAfter(",", base64Data)
-                val bytes = Base64.decode(cleanBase64, Base64.DEFAULT)
-                val values = ContentValues().apply {
-                    put(MediaStore.Downloads.DISPLAY_NAME, fileName)
-                    put(MediaStore.Downloads.MIME_TYPE, "video/webm")
-                    put(
-                        MediaStore.Downloads.RELATIVE_PATH,
-                        Environment.DIRECTORY_DOWNLOADS + "/TG7 Editor"
-                    )
-                }
-                val uri = contentResolver.insert(
-                    MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-                    values
-                ) ?: return false
+            return saveVideoWithMime(base64Data, fileName, null)
+        }
 
-                contentResolver.openOutputStream(uri)?.use { out ->
-                    out.write(bytes)
-                }
+        @JavascriptInterface
+        fun saveVideoWithMime(base64Data: String, fileName: String, mimeType: String?): Boolean {
+            return try {
+                insertVideoIntoGallery(base64Data, fileName, mimeType) ?: return false
                 runOnUiThread {
                     Toast.makeText(
                         this@MainActivity,
-                        "Saved to Downloads/TG7 Editor/$fileName",
+                        "Saved to Gallery: Movies/TG7 Editor/$fileName",
                         Toast.LENGTH_LONG
                     ).show()
                 }
@@ -271,11 +299,69 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread {
                     Toast.makeText(
                         this@MainActivity,
-                        "Export save failed",
+                        "Could not save video to Gallery",
                         Toast.LENGTH_SHORT
                     ).show()
                 }
                 false
+            }
+        }
+
+        @JavascriptInterface
+        fun shareVideo(base64Data: String, fileName: String, mimeType: String?): Boolean {
+            return try {
+                val uri = insertVideoIntoGallery(base64Data, fileName, mimeType) ?: return false
+                val resolvedMime = mimeType ?: if (fileName.endsWith(".mp4", true)) "video/mp4" else "video/webm"
+                runOnUiThread {
+                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = resolvedMime
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    startActivity(Intent.createChooser(shareIntent, "Share TG7 Video"))
+                }
+                true
+            } catch (_: Exception) {
+                false
+            }
+        }
+
+        @JavascriptInterface
+        fun fetchText(urlString: String): String {
+            return try {
+                val url = java.net.URL(urlString)
+                val conn = (url.openConnection() as java.net.HttpURLConnection).apply {
+                    connectTimeout = 9000
+                    readTimeout = 12000
+                    instanceFollowRedirects = true
+                    setRequestProperty(
+                        "User-Agent",
+                        "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/126.0 Mobile Safari/537.36"
+                    )
+                }
+                conn.inputStream.bufferedReader().use { it.readText() }
+            } catch (_: Exception) {
+                ""
+            }
+        }
+
+        @JavascriptInterface
+        fun fetchBase64(urlString: String): String {
+            return try {
+                val url = java.net.URL(urlString)
+                val conn = (url.openConnection() as java.net.HttpURLConnection).apply {
+                    connectTimeout = 10000
+                    readTimeout = 20000
+                    instanceFollowRedirects = true
+                    setRequestProperty(
+                        "User-Agent",
+                        "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/126.0 Mobile Safari/537.36"
+                    )
+                }
+                val bytes = conn.inputStream.use { it.readBytes() }
+                Base64.encodeToString(bytes, Base64.NO_WRAP)
+            } catch (_: Exception) {
+                ""
             }
         }
     }

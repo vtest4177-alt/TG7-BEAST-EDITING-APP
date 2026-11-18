@@ -1,8 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ArrowLeft, Check } from 'lucide-react';
 import { AnimatePresence } from 'motion/react';
 import { BootSplash } from './components/BootSplash';
-import { BottomSheetTool, CapCutBottomDock } from './components/CapCutBottomDock';
+import {
+  BottomSheetTool,
+  CapCutBottomDock,
+  StudioToolInspector,
+} from './components/CapCutBottomDock';
 import { CapCutHome, QuickPresetKind } from './components/CapCutHome';
 import { CapCutTimeline, TimelineDragMode } from './components/CapCutTimeline';
 import { ExportModal } from './components/ExportModal';
@@ -11,11 +15,14 @@ import { MemeLibrarySheet } from './components/MemeLibrarySheet';
 import { PreviewStage } from './components/PreviewStage';
 import { SvgStickerSheet } from './components/SvgStickerSheet';
 import {
+  CREATOR_TEXT_RECIPES,
+  GOOGLE_FONT_CATALOG,
   INTRO_OUTRO_TEMPLATES,
   IntroOutroTemplate,
   loadGoogleFont,
   MemeLibraryItem,
 } from './data/assetsCatalog';
+import { fetchRemoteFileAsFile } from './data/onlineLibraries';
 import {
   generateStockThumbnailDataUrl,
   getProjectDuration,
@@ -26,6 +33,11 @@ import {
   createInitialDemoProject,
   SPEED_PRESETS,
 } from './engine/demoProject';
+import {
+  loadStudioDraftSnapshot,
+  saveMediaBlobToDraftDb,
+  saveStudioDraftSnapshot,
+} from './engine/draftStorage';
 import {
   extractAudioWaveform,
   extractVideoThumbnails,
@@ -70,10 +82,15 @@ export default function App() {
 
   const [undoStack, setUndoStack] = useState<ProjectState[]>([]);
   const [redoStack, setRedoStack] = useState<ProjectState[]>([]);
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
 
   const mediaElementsRef = useRef<
     Map<string, HTMLVideoElement | HTMLImageElement | HTMLAudioElement>
   >(new Map());
+  const desktopAudioInputRef = useRef<HTMLInputElement | null>(null);
+  const hasHydratedDraftsRef = useRef(false);
+  const saveTimerRef = useRef<number | null>(null);
   const triggeredSfxRef = useRef<Set<string>>(new Set());
   const previewTimerRef = useRef<number | null>(null);
 
@@ -82,6 +99,103 @@ export default function App() {
   const totalDuration = getProjectDuration(project);
   const selectedClip =
     project.clips.find((c) => c.id === project.selectedClipId) ?? null;
+
+  // Bind HTMLVideoElement / HTMLImageElement / HTMLAudioElement cleanly from URL
+  const bindMediaElementForClip = useCallback((clip: Clip) => {
+    if (!clip.mediaUrl) return;
+    if (clip.sourceType === 'local-image') {
+      const img = new Image();
+      if (clip.mediaUrl.startsWith('http')) img.crossOrigin = 'anonymous';
+      img.src = clip.mediaUrl;
+      mediaElementsRef.current.set(clip.id, img);
+    } else if (clip.sourceType === 'local-video') {
+      const vid = document.createElement('video');
+      vid.preload = 'metadata';
+      vid.playsInline = true;
+      vid.src = clip.mediaUrl;
+      mediaElementsRef.current.set(clip.id, vid);
+    } else if (clip.sourceType === 'local-audio') {
+      const aud = new Audio(clip.mediaUrl);
+      aud.preload = 'auto';
+      mediaElementsRef.current.set(clip.id, aud);
+    }
+  }, []);
+
+  // Hydrate crash-safe saved drafts + local media blobs + custom fonts on boot
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const { snapshot } = await loadStudioDraftSnapshot();
+      if (cancelled) return;
+      if (snapshot && snapshot.projects.length > 0) {
+        setProjects(snapshot.projects);
+        setActiveProjectId(snapshot.activeProjectId || snapshot.projects[0].id);
+        setCustomFonts(snapshot.customFonts || []);
+        setDeviceAssets(snapshot.deviceAssets || []);
+        setLastSavedAt(snapshot.savedAt);
+
+        snapshot.projects.forEach((p) => {
+          p.clips.forEach((c) => {
+            bindMediaElementForClip(c);
+            if (c.fontFamily) {
+              const gf = GOOGLE_FONT_CATALOG.find((g) => g.name === c.fontFamily);
+              if (gf) void loadGoogleFont(gf);
+            }
+          });
+        });
+      }
+      hasHydratedDraftsRef.current = true;
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [bindMediaElementForClip]);
+
+  // Continuous debounced auto-save + immediate flush before tab close / crash
+  const latestDraftStateRef = useRef({
+    projects,
+    activeProjectId,
+    customFonts,
+    deviceAssets,
+  });
+  latestDraftStateRef.current = { projects, activeProjectId, customFonts, deviceAssets };
+
+  useEffect(() => {
+    if (!hasHydratedDraftsRef.current) return;
+    if (saveTimerRef.current !== null) {
+      window.clearTimeout(saveTimerRef.current);
+    }
+    saveTimerRef.current = window.setTimeout(() => {
+      saveTimerRef.current = null;
+      const snap = latestDraftStateRef.current;
+      void saveStudioDraftSnapshot({
+        ...snap,
+        savedAt: Date.now(),
+      }).then(() => setLastSavedAt(Date.now()));
+    }, 350);
+    return () => {
+      if (saveTimerRef.current !== null) {
+        window.clearTimeout(saveTimerRef.current);
+      }
+    };
+  }, [projects, activeProjectId, customFonts, deviceAssets]);
+
+  useEffect(() => {
+    const flushNow = () => {
+      if (!hasHydratedDraftsRef.current) return;
+      const snap = latestDraftStateRef.current;
+      void saveStudioDraftSnapshot({
+        ...snap,
+        savedAt: Date.now(),
+      });
+    };
+    window.addEventListener('beforeunload', flushNow);
+    window.addEventListener('pagehide', flushNow);
+    return () => {
+      window.removeEventListener('beforeunload', flushNow);
+      window.removeEventListener('pagehide', flushNow);
+    };
+  }, []);
 
   const commitProjectChange = (
     updater: (prev: ProjectState) => ProjectState,
@@ -342,9 +456,9 @@ export default function App() {
         textContent: 'YOUR TEXT',
         textColor: '#FFFFFF',
         fontFamily: 'Orbitron',
-        fontSize: 78,
+        fontSize: 80,
         textStyle: 'outline',
-        textAnimation: 'pop-bounce',
+        textAnimation: 'bounceIn',
         startSec: Math.round(prev.playheadSec * 100) / 100,
         durationSec: 3.0,
         trimStartSec: 0,
@@ -417,46 +531,33 @@ export default function App() {
     setActiveSheet('motion');
   };
 
-  const handleImportDirectUrl = (url: string) => {
-    const cleanName = decodeURIComponent(url.split('/').pop()?.split('?')[0] || 'Web Asset').slice(0, 28);
-    const lower = url.toLowerCase();
-    const isAudio = /\.(mp3|wav|ogg|m4a|aac)(\?|$)/.test(lower);
-    const isVideo = /\.(mp4|webm|mov|m4v)(\?|$)/.test(lower);
+  const handleImportOnlineMedia = async (
+    remoteUrl: string,
+    title: string,
+    kind: 'audio' | 'video' | 'image',
+    proxyUrl?: string,
+    asOverlay = true
+  ) => {
+    const ext =
+      kind === 'audio' ? 'mp3' : kind === 'video' ? 'mp4' : 'jpg';
+    const fileName = /\.[a-z0-9]{2,5}$/i.test(title) ? title : `${title}.${ext}`;
+    const mime =
+      kind === 'audio' ? 'audio/mpeg' : kind === 'video' ? 'video/mp4' : 'image/jpeg';
+    const file = await fetchRemoteFileAsFile(remoteUrl, fileName, proxyUrl, mime);
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    handleImportDeviceFiles(dt.files, kind === 'audio' ? false : asOverlay);
+  };
 
-    if (isAudio) {
-      const asset: MediaAsset = {
-        id: `asset-url-${Date.now()}`,
-        name: cleanName || 'Web Audio',
-        kind: 'audio',
-        url,
-        durationSec: 12.0,
-        waveform: fallbackWaveform(48),
-      };
-      setDeviceAssets((prev) => [asset, ...prev]);
-      appendGalleryItemsToProject(project.id, [{ kind: 'asset', asset }], false);
-    } else if (isVideo) {
-      const asset: MediaAsset = {
-        id: `asset-url-${Date.now()}`,
-        name: cleanName || 'Web Video',
-        kind: 'video',
-        url,
-        durationSec: 5.0,
-        thumbnails: [],
-      };
-      setDeviceAssets((prev) => [asset, ...prev]);
-      appendGalleryItemsToProject(project.id, [{ kind: 'asset', asset }], true);
-    } else {
-      const asset: MediaAsset = {
-        id: `asset-url-${Date.now()}`,
-        name: cleanName || 'Web Meme / SVG',
-        kind: 'image',
-        url,
-        durationSec: 4.0,
-        thumbnails: [url],
-      };
-      setDeviceAssets((prev) => [asset, ...prev]);
-      appendGalleryItemsToProject(project.id, [{ kind: 'asset', asset }], true);
-    }
+  const handleImportDirectUrl = async (url: string) => {
+    const cleanName = decodeURIComponent(url.split('/').pop()?.split('?')[0] || 'Web Asset').slice(0, 36);
+    const lower = url.toLowerCase();
+    const kind: 'audio' | 'video' | 'image' = /\.(mp3|wav|ogg|m4a|aac)(\?|$)/.test(lower)
+      ? 'audio'
+      : /\.(mp4|webm|mov|m4v)(\?|$)/.test(lower)
+        ? 'video'
+        : 'image';
+    await handleImportOnlineMedia(url, cleanName || 'Web Asset', kind, undefined, kind !== 'audio');
   };
 
   const handlePreviewSegment = (startSec: number) => {
@@ -611,110 +712,71 @@ export default function App() {
   const handleAddMeme = (item: MemeLibraryItem) => {
     commitProjectChange((prev) => {
       const nextTracks = [...prev.tracks];
-      const clipId = `clip-meme-${Date.now()}`;
-
-      if (item.kind === 'sfx') {
-        let audioTrack = nextTracks.find((t) => t.type === 'audio');
-        if (!audioTrack) {
-          audioTrack = {
-            id: `track-audio-${Date.now()}`,
-            label: 'Audio',
-            type: 'audio',
-            muted: false,
-            locked: false,
-            hidden: false,
-          };
-          nextTracks.push(audioTrack);
-        }
-        const sfxClip: Clip = {
-          id: clipId,
-          trackId: audioTrack.id,
-          name: item.title,
-          sourceType: 'meme-sfx',
-          sfxId: item.sfxId,
-          waveform: fallbackWaveform(32),
-          startSec: Math.round(prev.playheadSec * 100) / 100,
-          durationSec: item.durationSec,
-          trimStartSec: 0,
-          volume: 1,
-          chromaKey: { enabled: false, targetHex: '#00FF00', similarity: 40, smoothness: 15 },
-          speedRamp: {
-            preset: 'normal',
-            points: SPEED_PRESETS.normal.points.map((p) => ({ ...p })),
-          },
-          keyframes: [],
-        };
-        return {
-          ...prev,
-          tracks: nextTracks,
-          selectedClipId: clipId,
-          clips: [...prev.clips, sfxClip],
-        };
-      }
-
-      let overlayTrack = nextTracks.find((t) => t.type === 'overlay');
-      if (!overlayTrack) {
-        overlayTrack = {
-          id: `track-overlay-${Date.now()}`,
-          label: 'Layer 1',
-          type: 'overlay',
+      const clipId = `clip-sfx-${Date.now()}`;
+      let audioTrack = nextTracks.find((t) => t.type === 'audio');
+      if (!audioTrack) {
+        audioTrack = {
+          id: `track-audio-${Date.now()}`,
+          label: 'Audio',
+          type: 'audio',
           muted: false,
           locked: false,
           hidden: false,
         };
-        nextTracks.push(overlayTrack);
+        nextTracks.push(audioTrack);
       }
-
-      const memeClip: Clip = {
+      const sfxClip: Clip = {
         id: clipId,
-        trackId: overlayTrack.id,
+        trackId: audioTrack.id,
         name: item.title,
-        sourceType: 'meme-clip',
-        memeId: item.id,
-        memeTopText: item.topText,
-        memeBottomText: item.bottomText,
-        memeAccent: item.accentHex,
+        sourceType: 'meme-sfx',
+        sfxId: item.sfxId,
+        waveform: fallbackWaveform(32),
         startSec: Math.round(prev.playheadSec * 100) / 100,
         durationSec: item.durationSec,
         trimStartSec: 0,
-        volume: 0,
-        chromaKey: {
-          enabled: Boolean(item.chromaGreen),
-          targetHex: '#00FF00',
-          similarity: 46,
-          smoothness: 18,
-        },
+        volume: 1,
+        chromaKey: { enabled: false, targetHex: '#00FF00', similarity: 40, smoothness: 15 },
         speedRamp: {
           preset: 'normal',
           points: SPEED_PRESETS.normal.points.map((p) => ({ ...p })),
         },
-        keyframes: [
-          {
-            id: `${clipId}-kf1`,
-            timeOffset: 0,
-            x: 0,
-            y: -8,
-            scale: 0.78,
-            rotation: 0,
-            opacity: 1,
-          },
-        ],
+        keyframes: [],
       };
-
       return {
         ...prev,
         tracks: nextTracks,
         selectedClipId: clipId,
-        clips: [...prev.clips, memeClip],
+        clips: [...prev.clips, sfxClip],
       };
     });
     setShowMemeLibrary(false);
+  };
+
+  const handleAddOnlineMemeImage = async (title: string, imageUrl: string, remoteUrl?: string) => {
+    try {
+      await handleImportOnlineMedia(remoteUrl || imageUrl, title, 'image', imageUrl, true);
+      setActiveSheet('motion');
+    } catch {
+      const asset: MediaAsset = {
+        id: `asset-meme-${Date.now()}`,
+        name: title,
+        kind: 'image',
+        url: imageUrl,
+        durationSec: 3.5,
+        thumbnails: [imageUrl],
+      };
+      setDeviceAssets((prev) => [asset, ...prev]);
+      appendGalleryItemsToProject(project.id, [{ kind: 'asset', asset }], true);
+      setActiveSheet('motion');
+    }
   };
 
   const handleImportDeviceFiles = (files: FileList, autoAppendAsOverlay = false) => {
     Array.from(files).forEach((file) => {
       const url = URL.createObjectURL(file);
       const assetId = `asset-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      void saveMediaBlobToDraftDb(assetId, file);
       const isAudio =
         file.type.startsWith('audio/') || /\.(mp3|wav|ogg|m4a|aac)$/i.test(file.name);
       const isImage =
@@ -890,6 +952,14 @@ export default function App() {
 
             if (asset.kind === 'image') {
               const img = new Image();
+              if (asset.url.startsWith('http')) {
+                img.crossOrigin = 'anonymous';
+                img.onerror = () => {
+                  const fallback = new Image();
+                  fallback.src = asset.url;
+                  mediaElementsRef.current.set(clipId, fallback);
+                };
+              }
               img.src = asset.url;
               mediaElementsRef.current.set(clipId, img);
             } else if (asset.kind === 'video') {
@@ -915,6 +985,7 @@ export default function App() {
                     ? 'local-image'
                     : 'local-video',
               mediaUrl: asset.url,
+              assetId: asset.id,
               thumbnails: asset.thumbnails,
               waveform: asset.waveform,
               startSec: Math.round(startSec * 100) / 100,
@@ -980,6 +1051,85 @@ export default function App() {
   const handleLaunchPreset = (preset: QuickPresetKind, ratio: AspectRatio) => {
     setUndoStack([]);
     setRedoStack([]);
+    if (preset === 'mrbeast-shorts') {
+      const antonMeta = GOOGLE_FONT_CATALOG.find((g) => g.name === 'Anton');
+      if (antonMeta) void loadGoogleFont(antonMeta);
+      const base = createBlankProject('MrBeast Viral Cut', ratio, 60);
+      const mainTrack = base.tracks.find((t) => t.type === 'video') ?? base.tracks[0];
+      const overlayTrack = base.tracks.find((t) => t.type === 'overlay') ?? base.tracks[1];
+      const thumb1 = generateStockThumbnailDataUrl('hyper-warp');
+      const thumb2 = generateStockThumbnailDataUrl('synth-horizon');
+      const c1Id = `clip-mb1-${Date.now()}`;
+      const c2Id = `clip-mb2-${Date.now() + 1}`;
+      const txtId = `clip-mbtxt-${Date.now() + 2}`;
+      const recipe = CREATOR_TEXT_RECIPES[0];
+
+      const clip1: Clip = {
+        id: c1Id,
+        trackId: mainTrack.id,
+        name: 'Hook Intro',
+        sourceType: 'stock-clip',
+        stockVariant: 'hyper-warp',
+        thumbnails: thumb1 ? [thumb1] : [],
+        startSec: 0,
+        durationSec: 3.0,
+        trimStartSec: 0,
+        volume: 0,
+        effect: { type: 'shake-impact', intensity: 45 },
+        chromaKey: { enabled: false, targetHex: '#00FF00', similarity: 40, smoothness: 15 },
+        speedRamp: { preset: 'normal', points: SPEED_PRESETS.normal.points.map((p) => ({ ...p })) },
+        keyframes: [],
+      };
+      const clip2: Clip = {
+        id: c2Id,
+        trackId: mainTrack.id,
+        name: 'Drop Climax',
+        sourceType: 'stock-clip',
+        stockVariant: 'synth-horizon',
+        thumbnails: thumb2 ? [thumb2] : [],
+        startSec: 3.0,
+        durationSec: 3.5,
+        trimStartSec: 0,
+        volume: 0,
+        transitionIn: { type: 'CrossZoom', durationSec: 0.45 },
+        effect: { type: 'zoom-pulse', intensity: 65 },
+        chromaKey: { enabled: false, targetHex: '#00FF00', similarity: 40, smoothness: 15 },
+        speedRamp: { preset: 'normal', points: SPEED_PRESETS.normal.points.map((p) => ({ ...p })) },
+        keyframes: [],
+      };
+      const txtClip: Clip = {
+        id: txtId,
+        trackId: overlayTrack.id,
+        name: '$10,000 CHALLENGE',
+        sourceType: 'demo-text',
+        textContent: '$10,000\nCHALLENGE!',
+        fontFamily: recipe.fontFamily,
+        fontSize: 88,
+        textAnimation: 'bounceIn',
+        ...recipe.patch,
+        startSec: 0.2,
+        durationSec: 3.2,
+        trimStartSec: 0,
+        volume: 0,
+        chromaKey: { enabled: false, targetHex: '#00FF00', similarity: 40, smoothness: 15 },
+        speedRamp: { preset: 'normal', points: SPEED_PRESETS.normal.points.map((p) => ({ ...p })) },
+        keyframes: [
+          { id: `${txtId}-kf1`, timeOffset: 0, x: 0, y: -4, scale: 1.0, rotation: -2, opacity: 1 },
+        ],
+      };
+      const mbProj: ProjectState = {
+        ...base,
+        playheadSec: 0.5,
+        selectedClipId: txtId,
+        clips: [clip1, clip2, txtClip],
+      };
+      setProjects((prev) => [mbProj, ...prev]);
+      setActiveProjectId(mbProj.id);
+      setActiveSheet('text');
+      setScreen('editor');
+      return;
+    }
+
     if (preset === 'meme-vault') {
       const newProj = createBlankProject(`Meme Edit ${projects.length + 1}`, ratio, 60);
       setProjects((prev) => [newProj, ...prev]);
@@ -1016,7 +1166,7 @@ export default function App() {
         trimStartSec: 0,
         volume: 0,
         effect: { type: 'rgb-glitch', intensity: 65 },
-        transitionIn: { type: 'glitch-cut', durationSec: 0.4 },
+        transitionIn: { type: 'GlitchMemories', durationSec: 0.45 },
         chromaKey: { enabled: false, targetHex: '#00FF00', similarity: 40, smoothness: 15 },
         speedRamp: {
           preset: 'normal',
@@ -1084,6 +1234,7 @@ export default function App() {
         </AnimatePresence>
         <CapCutHome
           projects={projects}
+          lastSavedAt={lastSavedAt}
           onOpenProject={(id) => {
             setActiveProjectId(id);
             setUndoStack([]);
@@ -1137,26 +1288,173 @@ export default function App() {
     );
   }
 
+  const inspectorSharedProps = {
+    selectedClip,
+    playheadSec: project.playheadSec,
+    aspectRatio: project.aspectRatio,
+    activeSheet,
+    customFonts,
+    onChangeSheet: setActiveSheet,
+    onPreviewSegment: handlePreviewSegment,
+    onAddSfxItem: handleAddMeme,
+    onImportOnlineMedia: handleImportOnlineMedia,
+    onOpenMemeHub: () => setShowMemeLibrary(true),
+    onApplyIntroOutro: handleApplyIntroOutro,
+    onChangeAspectRatio: (aspectRatio: AspectRatio) =>
+      commitProjectChange((prev) => ({ ...prev, aspectRatio })),
+    onUpdateTransform: (patch: Partial<Omit<Keyframe, 'id' | 'timeOffset'>>) =>
+      handleUpsertKeyframe(patch, false),
+    onUpdateChromaKey: (patch: Partial<ChromaKeyConfig>) =>
+      updateSelectedClip((clip) => ({
+        ...clip,
+        chromaKey: { ...clip.chromaKey, ...patch },
+      })),
+    onUpdateSpeedRamp: (preset: SpeedPreset, points: SpeedPoint[]) =>
+      updateSelectedClip((clip) => ({
+        ...clip,
+        speedRamp: { preset, points },
+      })),
+    onUpdateText: (textContent: string, textColor: string) =>
+      updateSelectedClip((clip) => ({
+        ...clip,
+        name: `Text · ${textContent.split('\n')[0] || 'Text'}`,
+        textContent,
+        textColor,
+      })),
+    onUpdateTextProps: (patch: Partial<Clip>) =>
+      updateSelectedClip((clip) => ({
+        ...clip,
+        ...patch,
+      })),
+    onUpdateTextStyle: (textStyle: TextStylePreset, fontSize?: number) =>
+      updateSelectedClip((clip) => ({
+        ...clip,
+        textStyle,
+        fontSize: fontSize ?? clip.fontSize ?? 74,
+      })),
+    onUpdateSvgColor: (svgAccent: string) =>
+      updateSelectedClip((clip) => ({ ...clip, svgAccent })),
+    onUpdateFont: (fontFamily: string) =>
+      updateSelectedClip((clip) => ({ ...clip, fontFamily })),
+    onAddCustomFont: (fontFamily: string) =>
+      setCustomFonts((prev) => (prev.includes(fontFamily) ? prev : [fontFamily, ...prev])),
+    onUpdateTextAnimation: (textAnimation: TextAnimationType) =>
+      updateSelectedClip((clip) => ({ ...clip, textAnimation })),
+    onUpdateEffect: (type: VideoEffectType, intensity: number) =>
+      updateSelectedClip((clip) => ({
+        ...clip,
+        effect: { type, intensity },
+      })),
+    onUpdateTransition: (type: TransitionType, durationSec: number) =>
+      updateSelectedClip((clip) => ({
+        ...clip,
+        transitionIn: { type, durationSec },
+      })),
+    onApplyTransitionToAll: (type: TransitionType, durationSec: number) =>
+      commitProjectChange((prev) => {
+        const mainTrack = prev.tracks.find((t) => t.type === 'video');
+        if (!mainTrack) return prev;
+        const mainSorted = prev.clips
+          .filter((c) => c.trackId === mainTrack.id)
+          .sort((a, b) => a.startSec - b.startSec);
+        const cutClipIds = new Set(mainSorted.slice(1).map((c) => c.id));
+        return {
+          ...prev,
+          clips: prev.clips.map((c) =>
+            cutClipIds.has(c.id) ? { ...c, transitionIn: { type, durationSec } } : c
+          ),
+        };
+      }),
+    onUpdateCrop: (crop: ClipCrop) =>
+      updateSelectedClip((clip) => ({ ...clip, crop })),
+  };
+
   return (
     <div className="h-screen w-screen overflow-hidden flex flex-col bg-[#000000] text-[#F5F5F7]">
+      <input
+        ref={desktopAudioInputRef}
+        type="file"
+        accept="audio/*"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files && e.target.files.length > 0) {
+            handleImportDeviceFiles(e.target.files, false);
+            e.target.value = '';
+          }
+        }}
+      />
+
       <AnimatePresence>
         {showSplash && <BootSplash onComplete={() => setShowSplash(false)} />}
       </AnimatePresence>
-      {/* Slim CapCut Top Header */}
-      <header className="h-12 px-3 sm:px-4 bg-[#000000] border-b border-[#16161B] flex items-center justify-between shrink-0">
-        <button
-          type="button"
-          onClick={() => {
-            commitProjectChange((p) => ({ ...p, isPlaying: false }), false);
-            setScreen('home');
-          }}
-          className="flex items-center gap-1.5 text-xs font-medium text-[#A1A1AE] hover:text-white min-h-[36px] px-1 cursor-pointer"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>Projects</span>
-        </button>
 
-        <div className="flex items-center gap-2">
+      {/* Pro 3-Zone Studio Top Command Bar */}
+      <header className="h-12 px-3 sm:px-4 bg-[#050507] border-b border-[#16161B] flex items-center justify-between gap-2 shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <button
+            type="button"
+            onClick={() => {
+              commitProjectChange((p) => ({ ...p, isPlaying: false }), false);
+              setScreen('home');
+            }}
+            className="flex items-center gap-1.5 text-xs font-medium text-[#A1A1AE] hover:text-white min-h-[36px] px-1.5 cursor-pointer shrink-0"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span className="hidden sm:inline">Projects</span>
+          </button>
+
+          {isEditingTitle ? (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                setIsEditingTitle(false);
+              }}
+              className="flex items-center gap-1"
+            >
+              <input
+                autoFocus
+                type="text"
+                value={project.name}
+                onChange={(e) =>
+                  commitProjectChange((p) => ({ ...p, name: e.target.value }), false)
+                }
+                onBlur={() => setIsEditingTitle(false)}
+                className="w-32 sm:w-44 px-2 py-1 rounded bg-[#14141A] border border-[#00CAE0] text-xs font-semibold text-white outline-none"
+              />
+              <button
+                type="submit"
+                className="p-1 text-[#00CAE0] cursor-pointer"
+                aria-label="Save name"
+              >
+                <Check className="w-3.5 h-3.5" />
+              </button>
+            </form>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setIsEditingTitle(true)}
+              title="Tap to rename project"
+              className="text-xs sm:text-sm font-semibold text-white/90 hover:text-[#00CAE0] truncate max-w-[140px] sm:max-w-[220px] cursor-pointer text-left"
+            >
+              {project.name}
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          {lastSavedAt && (
+            <span className="hidden md:inline text-[10px] font-mono text-[#6F6F7D]">
+              Draft saved
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => setActiveSheet(activeSheet === 'ratio' ? null : 'ratio')}
+            className="hidden sm:inline-flex px-2 py-1 rounded bg-[#16161B] hover:bg-[#202028] text-[11px] font-mono text-[#A1A1AE] hover:text-white cursor-pointer"
+          >
+            {project.aspectRatio}
+          </button>
           <button
             type="button"
             onClick={() =>
@@ -1165,7 +1463,7 @@ export default function App() {
                 false
               )
             }
-            className="px-2.5 py-1 rounded bg-[#16161B] text-[11px] font-mono tabular-nums text-[#F5F5F7] cursor-pointer"
+            className="px-2.5 py-1 rounded bg-[#16161B] hover:bg-[#202028] text-[11px] font-mono tabular-nums text-[#F5F5F7] cursor-pointer"
           >
             1080P · {project.fps}fps
           </button>
@@ -1174,38 +1472,69 @@ export default function App() {
         <button
           type="button"
           onClick={() => setShowExportModal(true)}
-          className="px-3.5 py-1.5 min-h-[34px] bg-[#00CAE0] hover:brightness-110 text-black text-xs font-bold rounded-md cursor-pointer whitespace-nowrap"
+          className="px-3.5 py-1.5 min-h-[34px] bg-[#00CAE0] hover:brightness-110 text-black text-xs font-bold rounded-md cursor-pointer whitespace-nowrap shrink-0"
         >
           Export
         </button>
       </header>
 
-      <PreviewStage
-        project={project}
-        mediaElements={mediaElementsRef.current}
-        canUndo={undoStack.length > 0}
-        canRedo={redoStack.length > 0}
-        onUndo={handleUndo}
-        onRedo={handleRedo}
-        onTogglePlay={() => {
-          if (previewTimerRef.current !== null) {
-            window.clearTimeout(previewTimerRef.current);
-            previewTimerRef.current = null;
-          }
-          commitProjectChange(
-            (prev) => ({
-              ...prev,
-              isPlaying: !prev.isPlaying,
-              playheadSec:
-                prev.playheadSec >= totalDuration - 0.05 ? 0 : prev.playheadSec,
-            }),
-            false
-          );
-        }}
-        onAddKeyframe={handleToggleKeyframeAtPlayhead}
-        onDragSelectedClip={(x, y) => handleUpsertKeyframe({ x, y }, false)}
-        onQuickImport={() => setGalleryMode({ mode: 'main' })}
-      />
+      {/* Responsive Split NLE Workbench: Stage Left + Right Inspector Sidebar on Desktop */}
+      <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-hidden">
+        <PreviewStage
+          project={project}
+          mediaElements={mediaElementsRef.current}
+          canUndo={undoStack.length > 0}
+          canRedo={redoStack.length > 0}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+          onTogglePlay={() => {
+            if (previewTimerRef.current !== null) {
+              window.clearTimeout(previewTimerRef.current);
+              previewTimerRef.current = null;
+            }
+            commitProjectChange(
+              (prev) => ({
+                ...prev,
+                isPlaying: !prev.isPlaying,
+                playheadSec:
+                  prev.playheadSec >= totalDuration - 0.05 ? 0 : prev.playheadSec,
+              }),
+              false
+            );
+          }}
+          onStepFrame={(deltaFrames) => {
+            const stepSec = deltaFrames / project.fps;
+            commitProjectChange(
+              (prev) => ({
+                ...prev,
+                isPlaying: false,
+                playheadSec: Math.max(
+                  0,
+                  Math.min(totalDuration, Math.round((prev.playheadSec + stepSec) * 1000) / 1000)
+                ),
+              }),
+              false
+            );
+          }}
+          onAddKeyframe={handleToggleKeyframeAtPlayhead}
+          onDragSelectedClip={(x, y) => handleUpsertKeyframe({ x, y }, false)}
+          onQuickImport={() => setGalleryMode({ mode: 'main' })}
+          onOpenEditText={() => setActiveSheet('text')}
+        />
+
+        {/* Desktop Pro Right-Side Inspector Drawer */}
+        <div className="hidden lg:flex h-full shrink-0">
+          <AnimatePresence mode="wait">
+            {activeSheet && (
+              <StudioToolInspector
+                {...inspectorSharedProps}
+                mode="desktop-sidebar"
+                onImportAudioClick={() => desktopAudioInputRef.current?.click()}
+              />
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
 
       <CapCutTimeline
         project={project}
@@ -1223,10 +1552,22 @@ export default function App() {
           if (!clipId) setActiveSheet(null);
           commitProjectChange((prev) => ({ ...prev, selectedClipId: clipId }), false);
         }}
+        onOpenEditText={(clipId) => {
+          commitProjectChange((prev) => ({ ...prev, selectedClipId: clipId }), false);
+          setActiveSheet('text');
+        }}
         onOpenTransition={(clipId) => {
           commitProjectChange((prev) => ({ ...prev, selectedClipId: clipId }), false);
           setActiveSheet('transition');
         }}
+        onToggleTrackFlag={(trackId, flag) =>
+          commitProjectChange((prev) => ({
+            ...prev,
+            tracks: prev.tracks.map((t) =>
+              t.id === trackId ? { ...t, [flag]: !t[flag] } : t
+            ),
+          }))
+        }
         onMoveOrTrimClip={(
           clipId,
           startSec,
@@ -1325,14 +1666,8 @@ export default function App() {
       />
 
       <CapCutBottomDock
-        selectedClip={selectedClip}
-        playheadSec={project.playheadSec}
-        aspectRatio={project.aspectRatio}
-        activeSheet={activeSheet}
-        customFonts={customFonts}
-        onChangeSheet={setActiveSheet}
+        {...inspectorSharedProps}
         onOpenSmartFx={handleOpenSmartFx}
-        onPreviewSegment={handlePreviewSegment}
         onDeselectClip={() =>
           commitProjectChange((prev) => ({ ...prev, selectedClipId: null }), false)
         }
@@ -1340,87 +1675,11 @@ export default function App() {
         onOpenMemes={() => setShowMemeLibrary(true)}
         onOpenSvgStickers={() => setShowSvgStickers(true)}
         onImportAudio={(files) => handleImportDeviceFiles(files, false)}
-        onAddSfxItem={handleAddMeme}
         onAddTextClip={handleAddTextClip}
-        onApplyIntroOutro={handleApplyIntroOutro}
         onSplit={handleSplitAtPlayhead}
         onToggleKeyframe={handleToggleKeyframeAtPlayhead}
         onDuplicate={handleDuplicateSelected}
         onDelete={handleDeleteSelected}
-        onChangeAspectRatio={(aspectRatio) =>
-          commitProjectChange((prev) => ({ ...prev, aspectRatio }))
-        }
-        onUpdateTransform={(patch) => handleUpsertKeyframe(patch, false)}
-        onUpdateChromaKey={(patch: Partial<ChromaKeyConfig>) =>
-          updateSelectedClip((clip) => ({
-            ...clip,
-            chromaKey: { ...clip.chromaKey, ...patch },
-          }))
-        }
-        onUpdateSpeedRamp={(preset: SpeedPreset, points: SpeedPoint[]) =>
-          updateSelectedClip((clip) => ({
-            ...clip,
-            speedRamp: { preset, points },
-          }))
-        }
-        onUpdateText={(textContent, textColor) =>
-          updateSelectedClip((clip) => ({
-            ...clip,
-            name: `Text · ${textContent || 'Text'}`,
-            textContent,
-            textColor,
-          }))
-        }
-        onUpdateTextStyle={(textStyle: TextStylePreset, fontSize?: number) =>
-          updateSelectedClip((clip) => ({
-            ...clip,
-            textStyle,
-            fontSize: fontSize ?? clip.fontSize ?? 74,
-          }))
-        }
-        onUpdateSvgColor={(svgAccent: string) =>
-          updateSelectedClip((clip) => ({ ...clip, svgAccent }))
-        }
-        onUpdateFont={(fontFamily) =>
-          updateSelectedClip((clip) => ({ ...clip, fontFamily }))
-        }
-        onAddCustomFont={(fontFamily) =>
-          setCustomFonts((prev) => (prev.includes(fontFamily) ? prev : [fontFamily, ...prev]))
-        }
-        onUpdateTextAnimation={(textAnimation: TextAnimationType) =>
-          updateSelectedClip((clip) => ({ ...clip, textAnimation }))
-        }
-        onUpdateEffect={(type: VideoEffectType, intensity: number) =>
-          updateSelectedClip((clip) => ({
-            ...clip,
-            effect: { type, intensity },
-          }))
-        }
-        onUpdateTransition={(type: TransitionType, durationSec: number) =>
-          updateSelectedClip((clip) => ({
-            ...clip,
-            transitionIn: { type, durationSec },
-          }))
-        }
-        onApplyTransitionToAll={(type: TransitionType, durationSec: number) =>
-          commitProjectChange((prev) => {
-            const mainTrack = prev.tracks.find((t) => t.type === 'video');
-            if (!mainTrack) return prev;
-            const mainSorted = prev.clips
-              .filter((c) => c.trackId === mainTrack.id)
-              .sort((a, b) => a.startSec - b.startSec);
-            const cutClipIds = new Set(mainSorted.slice(1).map((c) => c.id));
-            return {
-              ...prev,
-              clips: prev.clips.map((c) =>
-                cutClipIds.has(c.id) ? { ...c, transitionIn: { type, durationSec } } : c
-              ),
-            };
-          })
-        }
-        onUpdateCrop={(crop: ClipCrop) =>
-          updateSelectedClip((clip) => ({ ...clip, crop }))
-        }
       />
 
       {galleryMode && (
@@ -1432,6 +1691,15 @@ export default function App() {
           }
           deviceAssets={deviceAssets}
           onImportDeviceFiles={handleImportDeviceFiles}
+          onImportOnlineMedia={(remoteUrl, title, kind, proxyUrl) =>
+            handleImportOnlineMedia(
+              remoteUrl,
+              title,
+              kind,
+              proxyUrl,
+              galleryMode.mode === 'overlay'
+            )
+          }
           onConfirmSelection={(items) => {
             const isOverlay = galleryMode.mode === 'overlay';
             setGalleryMode(null);
@@ -1444,6 +1712,8 @@ export default function App() {
       {showMemeLibrary && (
         <MemeLibrarySheet
           onAddMeme={handleAddMeme}
+          onAddOnlineMemeImage={handleAddOnlineMemeImage}
+          onImportOnlineMedia={handleImportOnlineMedia}
           onImportFiles={(files, asOverlay) => handleImportDeviceFiles(files, Boolean(asOverlay))}
           onImportDirectUrl={handleImportDirectUrl}
           onOpenSvgStickers={() => setShowSvgStickers(true)}

@@ -26,40 +26,65 @@ export type SpeedPreset =
 export type VideoEffectType =
   | 'none'
   | 'rgb-glitch'
+  | 'chromatic-aberration'
+  | 'crt-scanlines'
+  | 'data-mosh'
+  | 'tv-static'
+  | 'cyber-matrix'
+  | 'motion-blur-zoom'
+  | 'radial-blur'
+  | 'whiplash-pan'
+  | 'shake-impact'
+  | 'heartbeat-pump'
+  | 'zoom-pulse'
+  | 'kaleidoscope'
+  | 'kaleido-8'
+  | 'bulge-fisheye'
+  | 'pinch-warp'
+  | 'swirl-vortex'
+  | 'mirror-split'
+  | 'mirror-quad'
+  | 'wave-ripple'
   | 'cyber-prism'
   | 'vhs-retro'
-  | 'motion-blur-zoom'
+  | 'neon-edges'
+  | 'halftone-pixel'
+  | 'mosaic-blur'
   | 'neon-flash'
-  | 'shake-impact'
-  | 'vignette'
+  | 'bloom-aura'
+  | 'thermal-heat'
+  | 'xray-invert'
+  | 'solarize'
+  | 'laser-grid'
+  | 'edge-glow'
   | 'cinematic-teal'
+  | 'vignette'
   | 'bw-contrast'
   | 'warm-gold'
-  | 'edge-glow'
-  | 'zoom-pulse';
+  | 'cyberpunk-pink'
+  | 'emerald-matrix'
+  | 'sepia-vintage'
+  | 'night-vision'
+  | 'sunset-glow'
+  | 'deep-contrast'
+  | 'fade-film';
 
-export type TransitionType =
-  | 'none'
-  | 'dissolve'
-  | 'flash-white'
-  | 'fade-black'
-  | 'zoom-in'
-  | 'zoom-out'
-  | 'slide-left'
-  | 'slide-up'
-  | 'spin-cut'
-  | 'circle-wipe'
-  | 'diamond-wipe'
-  | 'glitch-cut';
+// Real gl-transitions shader names (225+ GLSL shaders) or 'none'
+export type TransitionType = 'none' | (string & {});
 
 export type TextAnimationType =
   | 'none'
+  | 'bounceIn'
+  | 'rubberBand'
+  | 'tada'
+  | 'jello'
+  | 'jackInTheBox'
+  | 'backInUp'
+  | 'zoomInDown'
+  | 'flipInX'
+  | 'lightSpeedInRight'
   | 'typewriter'
-  | 'pop-bounce'
-  | 'slide-up'
-  | 'glitch-flicker'
-  | 'neon-pulse'
-  | 'zoom-reveal';
+  | 'glitch-flicker';
 
 export type TextStylePreset =
   | 'clean'
@@ -117,6 +142,7 @@ export interface Clip {
   name: string;
   sourceType: ClipSourceType;
   mediaUrl?: string;
+  assetId?: string;
   thumbnails?: string[];
   waveform?: number[];
   textContent?: string;
@@ -125,6 +151,23 @@ export interface Clip {
   fontSize?: number;
   textStyle?: TextStylePreset;
   textAnimation?: TextAnimationType;
+  // Full Creator Typography Controls (editable anytime after creation)
+  textGradientEnabled?: boolean;
+  textGradientColor1?: string;
+  textGradientColor2?: string;
+  textGradientAngle?: number;
+  textStrokeColor?: string;
+  textStrokeWidth?: number;
+  textShadowColor?: string;
+  textShadowBlur?: number;
+  textShadowOffsetX?: number;
+  textShadowOffsetY?: number;
+  textBgEnabled?: boolean;
+  textBgColor?: string;
+  textBgRadius?: number;
+  textUppercase?: boolean;
+  textLetterSpacing?: number;
+
   svgMarkup?: string;
   svgAccent?: string;
   effect?: {

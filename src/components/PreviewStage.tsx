@@ -1,5 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
-import { Diamond, Pause, Play, Plus, Redo2, Undo2 } from 'lucide-react';
+import { motion } from 'motion/react';
+import {
+  ChevronLeft,
+  ChevronRight,
+  Crosshair,
+  Diamond,
+  Maximize2,
+  Minimize2,
+  Pause,
+  Pencil,
+  Play,
+  Plus,
+  Redo2,
+  Smartphone,
+  Undo2,
+} from 'lucide-react';
 import {
   formatTimecode,
   getProjectDuration,
@@ -16,9 +31,11 @@ interface PreviewStageProps {
   onUndo: () => void;
   onRedo: () => void;
   onTogglePlay: () => void;
+  onStepFrame?: (deltaFrames: number) => void;
   onAddKeyframe: () => void;
   onDragSelectedClip: (xPercent: number, yPercent: number) => void;
   onQuickImport: () => void;
+  onOpenEditText?: () => void;
 }
 
 const ASPECT_DIMENSIONS: Record<AspectRatio, { w: number; h: number }> = {
@@ -35,14 +52,21 @@ export function PreviewStage({
   onUndo,
   onRedo,
   onTogglePlay,
+  onStepFrame,
   onAddKeyframe,
   onDragSelectedClip,
   onQuickImport,
+  onOpenEditText,
 }: PreviewStageProps) {
+  const stageSectionRef = useRef<HTMLElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const lastSeekTsRef = useRef<number>(0);
   const renderRafRef = useRef<number | null>(null);
-  const latestRenderStateRef = useRef({ project, mediaElements, dims: ASPECT_DIMENSIONS[project.aspectRatio] });
+  const latestRenderStateRef = useRef({
+    project,
+    mediaElements,
+    dims: ASPECT_DIMENSIONS[project.aspectRatio],
+  });
 
   const dragOriginRef = useRef<{
     clientX: number;
@@ -51,12 +75,20 @@ export function PreviewStage({
     origY: number;
   } | null>(null);
   const [isDraggingStage, setIsDraggingStage] = useState(false);
+  const [showSafeZone, setShowSafeZone] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const totalDuration = getProjectDuration(project);
   const dims = ASPECT_DIMENSIONS[project.aspectRatio];
   const selectedClip = project.clips.find((c) => c.id === project.selectedClipId) ?? null;
 
   latestRenderStateRef.current = { project, mediaElements, dims };
+
+  useEffect(() => {
+    const onFsChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
+  }, []);
 
   useEffect(() => {
     const mainTrack = project.tracks.find((t) => t.type === 'video');
@@ -169,6 +201,20 @@ export function PreviewStage({
     setIsDraggingStage(false);
   };
 
+  const toggleFullscreen = async () => {
+    const el = stageSectionRef.current;
+    if (!el) return;
+    try {
+      if (!document.fullscreenElement) {
+        await el.requestFullscreen();
+      } else {
+        await document.exitFullscreen();
+      }
+    } catch {
+      // ignore if browser blocks fullscreen inside iframe
+    }
+  };
+
   const aspectClass =
     project.aspectRatio === '16:9'
       ? 'aspect-video max-h-full w-auto max-w-full'
@@ -178,13 +224,13 @@ export function PreviewStage({
 
   return (
     <section
-      aria-label="CapCut video preview"
-      className="h-[38vh] min-h-[195px] max-h-[380px] shrink-0 flex flex-col bg-[#000000] overflow-hidden"
+      ref={stageSectionRef}
+      aria-label="TG7 video monitor"
+      className="h-[36vh] min-h-[195px] max-h-[380px] lg:h-full lg:max-h-none lg:flex-1 shrink-0 flex flex-col bg-[#000000] overflow-hidden"
     >
-      {/* Centered Black Preview Canvas */}
-      <div className="flex-1 min-h-0 px-4 pt-1.5 pb-1 flex items-center justify-center overflow-hidden">
+      <div className="flex-1 min-h-0 px-3 sm:px-5 pt-2 pb-1 flex items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_center,_rgba(0,202,224,0.06)_0%,_rgba(0,0,0,1)_72%)]">
         <div
-          className={`${aspectClass} relative bg-[#08080A] border border-[#1E1E24] overflow-hidden flex items-center justify-center`}
+          className={`${aspectClass} relative bg-[#08080A] border border-[#1E1E24] rounded-md overflow-hidden flex items-center justify-center shadow-[0_12px_40px_rgba(0,0,0,0.8)]`}
         >
           <canvas
             ref={canvasRef}
@@ -194,45 +240,135 @@ export function PreviewStage({
             onPointerMove={handleCanvasPointerMove}
             onPointerUp={endCanvasDrag}
             onPointerCancel={endCanvasDrag}
+            onDoubleClick={() => {
+              if (selectedClip?.sourceType === 'demo-text' && onOpenEditText) {
+                onOpenEditText();
+              }
+            }}
             className={`w-full h-full object-contain block ${
               isDraggingStage ? 'cursor-grabbing' : selectedClip ? 'cursor-grab' : ''
             }`}
           />
 
+          {/* Reels / Shorts 9:16 Safe Zone Guide */}
+          {showSafeZone && (
+            <div
+              aria-hidden="true"
+              className="absolute inset-0 pointer-events-none"
+            >
+              <div className="absolute inset-x-[6%] top-[10%] bottom-[22%] border border-dashed border-[#00CAE0]/70 rounded-md">
+                <span className="absolute top-1 left-1.5 text-[9px] font-mono uppercase tracking-wider text-[#00CAE0] bg-black/75 px-1 rounded">
+                  Reels / Shorts Safe Area
+                </span>
+              </div>
+              <div className="absolute right-[4%] bottom-[22%] w-8 h-32 border border-dashed border-[#F59E0B]/55 rounded" />
+            </div>
+          )}
+
+          {/* Stage Quick Actions when Text Clip Selected */}
+          {selectedClip?.sourceType === 'demo-text' && (
+            <div className="absolute bottom-2 right-2 flex items-center gap-1.5">
+              <motion.button
+                whileTap={{ scale: 0.9 }}
+                type="button"
+                onClick={() => onDragSelectedClip(0, 0)}
+                title="Center text on screen"
+                className="px-2 py-1 rounded-md bg-black/80 hover:bg-black border border-white/20 text-[11px] font-medium text-[#E4E4EA] flex items-center gap-1 shadow-lg cursor-pointer"
+              >
+                <Crosshair className="w-3 h-3 text-[#00CAE0]" />
+                <span>Center</span>
+              </motion.button>
+              {onOpenEditText && (
+                <motion.button
+                  whileTap={{ scale: 0.9 }}
+                  type="button"
+                  onClick={onOpenEditText}
+                  className="px-2.5 py-1 rounded-md bg-black/85 hover:bg-black border border-[#00CAE0]/70 text-[11px] font-semibold text-[#00CAE0] flex items-center gap-1 shadow-lg cursor-pointer"
+                >
+                  <Pencil className="w-3 h-3" />
+                  <span>Edit Text</span>
+                </motion.button>
+              )}
+            </div>
+          )}
+
           {project.clips.length === 0 && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-4 bg-black/80">
-              <button
+              <motion.button
+                whileTap={{ scale: 0.92 }}
                 type="button"
                 onClick={onQuickImport}
                 className="px-4 py-2.5 min-h-[42px] bg-[#00CAE0] hover:brightness-110 text-black text-xs font-semibold rounded-lg flex items-center gap-2 cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>Add Video or Photo</span>
-              </button>
+              </motion.button>
             </div>
           )}
         </div>
       </div>
 
-      {/* CapCut Floating Transport Bar */}
-      <div className="h-11 px-4 flex items-center justify-between gap-4 shrink-0 border-b border-[#16161B]">
+      {/* Creator Transport & Monitor Controls Bar */}
+      <div className="h-11 px-3 sm:px-4 flex items-center justify-between gap-2 shrink-0 border-b border-[#16161B] bg-[#070709]">
         <div className="text-[11px] font-mono tabular-nums text-[#8E8E98] whitespace-nowrap">
           <span className="text-white">{formatTimecode(project.playheadSec)}</span>
           <span className="mx-1">/</span>
           <span>{formatTimecode(totalDuration)}</span>
         </div>
 
-        <button
-          type="button"
-          onClick={onTogglePlay}
-          aria-label={project.isPlaying ? 'Pause' : 'Play'}
-          className="w-9 h-9 rounded-full bg-white hover:bg-[#E5E5EA] text-black flex items-center justify-center transition-colors cursor-pointer"
-        >
-          {project.isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
-        </button>
+        <div className="flex items-center gap-1.5">
+          {onStepFrame && (
+            <motion.button
+              whileTap={{ scale: 0.85 }}
+              type="button"
+              onClick={() => onStepFrame(-1)}
+              title="Previous frame (-1f)"
+              aria-label="Step back 1 frame"
+              className="w-7 h-7 rounded-md bg-[#131318] hover:bg-[#1E1E26] text-[#A1A1AE] hover:text-white flex items-center justify-center cursor-pointer"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </motion.button>
+          )}
+
+          <motion.button
+            whileTap={{ scale: 0.86 }}
+            type="button"
+            onClick={onTogglePlay}
+            aria-label={project.isPlaying ? 'Pause' : 'Play'}
+            className="w-9 h-9 rounded-full bg-white hover:bg-[#E5E5EA] text-black flex items-center justify-center transition-colors cursor-pointer"
+          >
+            {project.isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
+          </motion.button>
+
+          {onStepFrame && (
+            <motion.button
+              whileTap={{ scale: 0.85 }}
+              type="button"
+              onClick={() => onStepFrame(1)}
+              title="Next frame (+1f)"
+              aria-label="Step forward 1 frame"
+              className="w-7 h-7 rounded-md bg-[#131318] hover:bg-[#1E1E26] text-[#A1A1AE] hover:text-white flex items-center justify-center cursor-pointer"
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+            </motion.button>
+          )}
+        </div>
 
         <div className="flex items-center gap-1">
-          <button
+          <motion.button
+            whileTap={{ scale: 0.85 }}
+            type="button"
+            onClick={() => setShowSafeZone((v) => !v)}
+            title="Toggle Reels/Shorts Safe Zone Guide"
+            aria-label="Toggle safe zones"
+            className={`w-8 h-8 rounded flex items-center justify-center cursor-pointer ${
+              showSafeZone ? 'bg-[#0F2A30] text-[#00CAE0]' : 'text-[#A1A1AE] hover:text-white'
+            }`}
+          >
+            <Smartphone className="w-4 h-4" />
+          </motion.button>
+          <motion.button
+            whileTap={{ scale: 0.85 }}
             type="button"
             disabled={!canUndo}
             onClick={onUndo}
@@ -240,8 +376,9 @@ export function PreviewStage({
             className="w-8 h-8 rounded flex items-center justify-center text-[#A1A1AE] hover:text-white disabled:opacity-30 cursor-pointer"
           >
             <Undo2 className="w-4 h-4" />
-          </button>
-          <button
+          </motion.button>
+          <motion.button
+            whileTap={{ scale: 0.85 }}
             type="button"
             disabled={!canRedo}
             onClick={onRedo}
@@ -249,8 +386,9 @@ export function PreviewStage({
             className="w-8 h-8 rounded flex items-center justify-center text-[#A1A1AE] hover:text-white disabled:opacity-30 cursor-pointer"
           >
             <Redo2 className="w-4 h-4" />
-          </button>
-          <button
+          </motion.button>
+          <motion.button
+            whileTap={{ scale: 0.85 }}
             type="button"
             disabled={!selectedClip}
             onClick={onAddKeyframe}
@@ -259,7 +397,17 @@ export function PreviewStage({
             className="w-8 h-8 rounded flex items-center justify-center text-[#FBBF24] hover:bg-[#1C1C22] disabled:opacity-30 cursor-pointer"
           >
             <Diamond className="w-4 h-4 fill-[#FBBF24]" />
-          </button>
+          </motion.button>
+          <motion.button
+            whileTap={{ scale: 0.85 }}
+            type="button"
+            onClick={() => void toggleFullscreen()}
+            aria-label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen preview'}
+            title="Fullscreen Preview"
+            className="hidden sm:flex w-8 h-8 rounded items-center justify-center text-[#A1A1AE] hover:text-white cursor-pointer"
+          >
+            {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+          </motion.button>
         </div>
       </div>
     </section>

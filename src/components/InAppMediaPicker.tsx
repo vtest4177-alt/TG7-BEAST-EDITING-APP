@@ -1,6 +1,7 @@
-import { useMemo, useRef, useState } from 'react';
-import { Check, ExternalLink, Film, Image as ImageIcon, Plus, X } from 'lucide-react';
-import { RESOURCE_WEBSITES, STOCK_CLIPS, StockClipPreset } from '../data/assetsCatalog';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Check, Film, Image as ImageIcon, Loader2, Plus, Search, X } from 'lucide-react';
+import { STOCK_CLIPS, StockClipPreset } from '../data/assetsCatalog';
+import { OnlineVfxItem, searchOnlineVfx } from '../data/onlineLibraries';
 import { generateStockThumbnailDataUrl } from '../engine/compositor';
 import { MediaAsset } from '../types/editor';
 
@@ -14,6 +15,12 @@ interface InAppMediaPickerProps {
   title: string;
   deviceAssets: MediaAsset[];
   onImportDeviceFiles: (files: FileList) => void;
+  onImportOnlineMedia?: (
+    remoteUrl: string,
+    title: string,
+    kind: 'audio' | 'video' | 'image',
+    proxyUrl?: string
+  ) => Promise<void>;
   onConfirmSelection: (items: SelectedGalleryItem[]) => void;
   onClose: () => void;
 }
@@ -22,11 +29,17 @@ export function InAppMediaPicker({
   title,
   deviceAssets,
   onImportDeviceFiles,
+  onImportOnlineMedia,
   onConfirmSelection,
   onClose,
 }: InAppMediaPickerProps) {
-  const [tab, setTab] = useState<'all' | 'videos' | 'photos' | 'stock'>('all');
+  const [tab, setTab] = useState<'all' | 'videos' | 'photos' | 'online-vfx' | 'stock'>('all');
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
+  const [vfxQuery, setVfxQuery] = useState('');
+  const [onlineVfx, setOnlineVfx] = useState<OnlineVfxItem[]>([]);
+  const [loadingVfx, setLoadingVfx] = useState(false);
+  const [busyVfxId, setBusyVfxId] = useState<string | null>(null);
+
   const videoInputRef = useRef<HTMLInputElement | null>(null);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -38,6 +51,26 @@ export function InAppMediaPicker({
     return map;
   }, []);
 
+  useEffect(() => {
+    if (tab !== 'online-vfx') return;
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      setLoadingVfx(true);
+      try {
+        const list = await searchOnlineVfx(vfxQuery);
+        if (!cancelled) setOnlineVfx(list);
+      } catch {
+        // ignore quietly
+      } finally {
+        if (!cancelled) setLoadingVfx(false);
+      }
+    }, 260);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [tab, vfxQuery]);
+
   const toggleSelect = (key: string) => {
     setSelectedKeys((prev) =>
       prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
@@ -47,7 +80,7 @@ export function InAppMediaPicker({
   const filteredAssets = deviceAssets.filter((a) => {
     if (tab === 'videos') return a.kind === 'video';
     if (tab === 'photos') return a.kind === 'image';
-    if (tab === 'stock') return false;
+    if (tab === 'stock' || tab === 'online-vfx') return false;
     return a.kind === 'video' || a.kind === 'image';
   });
 
@@ -105,23 +138,23 @@ export function InAppMediaPicker({
         }}
       />
 
-      {/* CapCut Gallery Header */}
+      {/* Header */}
       <header className="h-14 px-4 border-b border-[#1C1C22] flex items-center justify-between shrink-0">
         <button
           type="button"
           onClick={onClose}
           aria-label="Close media picker"
-          className="w-9 h-9 rounded-full hover:bg-[#1C1C22] flex items-center justify-center cursor-pointer"
+          className="w-10 h-10 rounded-full hover:bg-[#1C1C22] flex items-center justify-center cursor-pointer"
         >
           <X className="w-5 h-5" />
         </button>
 
         <h2 className="font-display text-sm font-semibold">{title}</h2>
 
-        <div className="w-9" />
+        <div className="w-10" />
       </header>
 
-      {/* CapCut Media Type Tabs */}
+      {/* Media Type Tabs */}
       <div className="px-4 py-2.5 border-b border-[#1C1C22] flex items-center justify-between gap-2 overflow-x-auto shrink-0">
         <div className="flex items-center gap-1.5">
           {(
@@ -129,6 +162,7 @@ export function InAppMediaPicker({
               { id: 'all', label: 'All' },
               { id: 'videos', label: 'Videos' },
               { id: 'photos', label: 'Photos' },
+              { id: 'online-vfx', label: 'Online VFX' },
               { id: 'stock', label: 'Stock Clips' },
             ] as const
           ).map((t) => (
@@ -147,7 +181,6 @@ export function InAppMediaPicker({
           ))}
         </div>
 
-        {/* Direct Gallery Import Buttons */}
         <div className="flex items-center gap-1.5 shrink-0">
           <button
             type="button"
@@ -168,132 +201,132 @@ export function InAppMediaPicker({
         </div>
       </div>
 
-      {/* Visual Media Grid */}
+      {/* Media Content Grid */}
       <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3">
-        {(tab === 'all' || tab === 'stock' || tab === 'videos') && (
-          <div className="max-w-5xl mx-auto flex items-center gap-2 overflow-x-auto pb-1">
-            <span className="text-[11px] text-[#8E8E98] whitespace-nowrap shrink-0">
-              Download VFX / Clips:
-            </span>
-            {RESOURCE_WEBSITES.filter((s) => s.category === 'Meme VFX & Video').map((site) => (
-              <a
-                key={site.id}
-                href={site.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-2.5 py-1 rounded-md bg-[#141418] hover:bg-[#1E1E26] border border-[#262630] text-[11px] font-medium flex items-center gap-1 whitespace-nowrap shrink-0"
-                style={{ color: site.accentHex }}
-              >
-                <span>{site.name}</span>
-                <ExternalLink className="w-3 h-3" />
-              </a>
-            ))}
-          </div>
-        )}
-
-        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 max-w-5xl mx-auto">
-          {/* Quick Device Gallery Tile */}
-          <button
-            type="button"
-            onClick={() =>
-              tab === 'photos' ? photoInputRef.current?.click() : videoInputRef.current?.click()
-            }
-            className="aspect-square rounded-xl bg-[#141418] hover:bg-[#1C1C22] border border-dashed border-[#00CAE0]/60 flex flex-col items-center justify-center gap-1.5 p-2 text-center cursor-pointer"
-          >
-            <div className="w-9 h-9 rounded-full bg-[#00CAE0]/15 flex items-center justify-center">
-              <Plus className="w-5 h-5 text-[#00CAE0]" />
+        {tab === 'online-vfx' ? (
+          <div className="max-w-5xl mx-auto space-y-3">
+            <div className="relative">
+              <Search className="w-4 h-4 text-[#8E8E98] absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={vfxQuery}
+                onChange={(e) => setVfxQuery(e.target.value)}
+                placeholder="Search free VFX overlays (glitch, explosion, fire, neon)..."
+                className="w-full pl-9 pr-3 py-2 bg-[#141418] border border-[#24242C] focus:border-[#00CAE0] rounded-lg text-xs text-white outline-none"
+              />
             </div>
-            <span className="text-[11px] font-medium text-[#F5F5F7]">
-              {tab === 'photos' ? 'Pick Photos' : 'Pick Videos'}
-            </span>
-          </button>
 
-          {/* Device Uploaded Media Tiles */}
-          {filteredAssets.map((asset) => {
-            const key = `asset:${asset.id}`;
-            const orderIdx = selectedKeys.indexOf(key);
-            const isSelected = orderIdx >= 0;
-            const thumb =
-              asset.kind === 'image'
-                ? asset.url
-                : asset.thumbnails && asset.thumbnails.length > 0
-                  ? asset.thumbnails[0]
-                  : '';
+            {loadingVfx ? (
+              <div className="py-10 flex items-center justify-center gap-2 text-xs text-[#8E8E98]">
+                <Loader2 className="w-4 h-4 animate-spin text-[#00CAE0]" />
+                <span>Loading online VFX clips...</span>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {onlineVfx.map((item) => {
+                  const busy = busyVfxId === item.id;
+                  return (
+                    <div
+                      key={item.id}
+                      className="rounded-xl overflow-hidden bg-[#141418] border border-[#24242C] flex flex-col justify-between"
+                    >
+                      <div className="h-28 bg-[#08080A] overflow-hidden">
+                        {item.thumbUrl && (
+                          <img
+                            src={item.thumbUrl}
+                            alt={item.title}
+                            loading="lazy"
+                            className="w-full h-full object-cover"
+                          />
+                        )}
+                      </div>
+                      <div className="p-2 flex items-center justify-between gap-2">
+                        <span className="text-[11px] text-white truncate">{item.title}</span>
+                        <button
+                          type="button"
+                          disabled={busy || !onImportOnlineMedia}
+                          onClick={async () => {
+                            if (!onImportOnlineMedia) return;
+                            setBusyVfxId(item.id);
+                            try {
+                              await onImportOnlineMedia(
+                                item.remoteVideoUrl,
+                                item.title,
+                                'video',
+                                item.videoUrl
+                              );
+                              onClose();
+                            } finally {
+                              setBusyVfxId(null);
+                            }
+                          }}
+                          className="px-2.5 h-7 rounded-lg bg-[#00CAE0] text-black text-[11px] font-bold flex items-center justify-center shrink-0 cursor-pointer"
+                        >
+                          {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : '+ Add'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 max-w-5xl mx-auto">
+            <button
+              type="button"
+              onClick={() =>
+                tab === 'photos' ? photoInputRef.current?.click() : videoInputRef.current?.click()
+              }
+              className="aspect-square rounded-xl bg-[#141418] hover:bg-[#1C1C22] border border-dashed border-[#00CAE0]/60 flex flex-col items-center justify-center gap-1.5 p-2 text-center cursor-pointer"
+            >
+              <div className="w-9 h-9 rounded-full bg-[#00CAE0]/15 flex items-center justify-center">
+                <Plus className="w-5 h-5 text-[#00CAE0]" />
+              </div>
+              <span className="text-[11px] font-medium text-[#F5F5F7]">
+                {tab === 'photos' ? 'Pick Photos' : 'Pick Videos'}
+              </span>
+            </button>
 
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => toggleSelect(key)}
-                className={`aspect-square rounded-xl overflow-hidden relative bg-[#141418] border cursor-pointer group ${
-                  isSelected ? 'border-[#00CAE0] ring-2 ring-[#00CAE0]' : 'border-[#24242C]'
-                }`}
-              >
-                {thumb ? (
-                  <img
-                    src={thumb}
-                    alt={asset.name}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <Film className="w-6 h-6 text-[#8E8E98]" />
-                  </div>
-                )}
-
-                <div className="absolute inset-x-0 bottom-0 p-1.5 bg-gradient-to-t from-black/90 to-transparent flex items-end justify-between gap-1">
-                  <span className="text-[10px] text-white truncate">{asset.name}</span>
-                  <span className="text-[10px] font-mono tabular-nums text-white/80 shrink-0">
-                    {asset.durationSec.toFixed(1)}s
-                  </span>
-                </div>
-
-                <div
-                  className={`absolute top-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold border ${
-                    isSelected
-                      ? 'bg-[#00CAE0] border-[#00CAE0] text-black'
-                      : 'bg-black/60 border-white/60 text-transparent'
-                  }`}
-                >
-                  {isSelected ? orderIdx + 1 : <Check className="w-3 h-3" />}
-                </div>
-              </button>
-            );
-          })}
-
-          {/* Built-in Animated Stock Clips */}
-          {showStock &&
-            STOCK_CLIPS.map((stock) => {
-              const key = `stock:${stock.id}`;
+            {filteredAssets.map((asset) => {
+              const key = `asset:${asset.id}`;
               const orderIdx = selectedKeys.indexOf(key);
               const isSelected = orderIdx >= 0;
-              const thumb = stockThumbs.get(stock.id);
+              const thumb =
+                asset.kind === 'image'
+                  ? asset.url
+                  : asset.thumbnails && asset.thumbnails.length > 0
+                    ? asset.thumbnails[0]
+                    : '';
 
               return (
                 <button
                   key={key}
                   type="button"
                   onClick={() => toggleSelect(key)}
-                  className={`aspect-square rounded-xl overflow-hidden relative bg-[#141418] border cursor-pointer ${
+                  className={`aspect-square rounded-xl overflow-hidden relative bg-[#141418] border cursor-pointer group ${
                     isSelected ? 'border-[#00CAE0] ring-2 ring-[#00CAE0]' : 'border-[#24242C]'
                   }`}
                 >
-                  {thumb && (
+                  {thumb ? (
                     <img
                       src={thumb}
-                      alt={stock.name}
+                      alt={asset.name}
                       className="w-full h-full object-cover"
                     />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <Film className="w-6 h-6 text-[#8E8E98]" />
+                    </div>
                   )}
-                  <div className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/70 text-[9px] font-mono text-[#00CAE0]">
-                    STOCK
-                  </div>
+
                   <div className="absolute inset-x-0 bottom-0 p-1.5 bg-gradient-to-t from-black/90 to-transparent flex items-end justify-between gap-1">
-                    <span className="text-[10px] text-white truncate">{stock.name}</span>
+                    <span className="text-[10px] text-white truncate">{asset.name}</span>
                     <span className="text-[10px] font-mono tabular-nums text-white/80 shrink-0">
-                      {stock.durationSec.toFixed(1)}s
+                      {asset.durationSec.toFixed(1)}s
                     </span>
                   </div>
+
                   <div
                     className={`absolute top-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold border ${
                       isSelected
@@ -306,10 +339,56 @@ export function InAppMediaPicker({
                 </button>
               );
             })}
-        </div>
+
+            {showStock &&
+              STOCK_CLIPS.map((stock) => {
+                const key = `stock:${stock.id}`;
+                const orderIdx = selectedKeys.indexOf(key);
+                const isSelected = orderIdx >= 0;
+                const thumb = stockThumbs.get(stock.id);
+
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => toggleSelect(key)}
+                    className={`aspect-square rounded-xl overflow-hidden relative bg-[#141418] border cursor-pointer ${
+                      isSelected ? 'border-[#00CAE0] ring-2 ring-[#00CAE0]' : 'border-[#24242C]'
+                    }`}
+                  >
+                    {thumb && (
+                      <img
+                        src={thumb}
+                        alt={stock.name}
+                        className="w-full h-full object-cover"
+                      />
+                    )}
+                    <div className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/70 text-[9px] font-mono text-[#00CAE0]">
+                      STOCK
+                    </div>
+                    <div className="absolute inset-x-0 bottom-0 p-1.5 bg-gradient-to-t from-black/90 to-transparent flex items-end justify-between gap-1">
+                      <span className="text-[10px] text-white truncate">{stock.name}</span>
+                      <span className="text-[10px] font-mono tabular-nums text-white/80 shrink-0">
+                        {stock.durationSec.toFixed(1)}s
+                      </span>
+                    </div>
+                    <div
+                      className={`absolute top-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold border ${
+                        isSelected
+                          ? 'bg-[#00CAE0] border-[#00CAE0] text-black'
+                          : 'bg-black/60 border-white/60 text-transparent'
+                      }`}
+                    >
+                      {isSelected ? orderIdx + 1 : <Check className="w-3 h-3" />}
+                    </div>
+                  </button>
+                );
+              })}
+          </div>
+        )}
       </div>
 
-      {/* CapCut Bottom Multi-Select Bar */}
+      {/* Multi-Select Bar */}
       <footer className="h-16 px-4 border-t border-[#1C1C22] bg-[#121215] flex items-center justify-between shrink-0">
         <div className="text-xs text-[#8E8E98]">
           {selectedKeys.length === 0
