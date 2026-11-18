@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --bg-canvas: #000000;
+  --bg-surface: #121215;
+  --bg-elevated: #1C1C21;
+  --border-hairline: #26262C;
+  --accent-cyan: #00CAE0;
+  --accent-keyframe: #FBBF24;
+  --text-primary: #F5F5F7;
+  --text-muted: #8E8E98;
+}
+
+@layer base {
+  html, body {
+    background-color: var(--bg-canvas);
+    color: var(--text-primary);
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    overscroll-behavior: none;
+  }
+
+  h1, h2, h3, .font-display {
+    font-family: 'Outfit', system-ui, -apple-system, sans-serif;
+  }
+
+  .font-mono, .tabular-nums {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2C2C34;
+  border-radius: 2px;
+}
+
+input[type="range"].tg7-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 3px;
+  background: #2C2C34;
+  border-radius: 2px;
+  outline: none;
+}
+
+input[type="range"].tg7-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: #FFFFFF;
+  border: 2px solid #00CAE0;
+  cursor: pointer;
+}
+
+input[type="range"].tg7-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: #FFFFFF;
+  border: 2px solid #00CAE0;
+  cursor: pointer;
+}

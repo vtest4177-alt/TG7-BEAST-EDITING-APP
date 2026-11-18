@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="Theme.TG7Editor" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="colorPrimary">@color/tg7_neon_red</item>
+        <item name="colorOnPrimary">@color/tg7_text_primary</item>
+        <item name="colorPrimaryContainer">@color/tg7_dark_crimson</item>
+        <item name="colorOnPrimaryContainer">@color/tg7_hyper_red</item>
+        <item name="colorSecondary">@color/tg7_hyper_red</item>
+        <item name="android:colorBackground">@color/tg7_pitch_black</item>
+        <item name="colorSurface">@color/tg7_carbon_surface</item>
+        <item name="colorOnSurface">@color/tg7_text_primary</item>
+        <item name="colorSurfaceVariant">@color/tg7_track_elevated</item>
+        <item name="colorOnSurfaceVariant">@color/tg7_text_muted</item>
+        <item name="colorOutline">@color/tg7_border_hairline</item>
+        <item name="android:statusBarColor">@color/tg7_pitch_black</item>
+        <item name="android:navigationBarColor">@color/tg7_pitch_black</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

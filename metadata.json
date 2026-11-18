@@ -1,0 +1,6 @@
+{
+  "name": "TG7 Editor",
+  "description": "CapCut-style Black & Neon Red multi-track video editor studio and automated GitHub Actions Android APK build pipeline for com.tg7.editor.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
