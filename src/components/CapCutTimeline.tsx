@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeftRight,
   Diamond,
   Music,
   Plus,
+  SkipBack,
   Volume2,
   VolumeX,
   ZoomIn,
@@ -63,6 +64,8 @@ export function CapCutTimeline({
   const dragRef = useRef<ActiveDragSession | null>(null);
   const pendingClientXRef = useRef<number | null>(null);
   const rafRef = useRef<number | null>(null);
+  const playheadRef = useRef<number>(project.playheadSec);
+  playheadRef.current = project.playheadSec;
 
   const pxPerSec = project.zoomPxPerSec;
   const totalDuration = Math.max(10, getProjectDuration(project));
@@ -117,19 +120,20 @@ export function CapCutTimeline({
 
   const snapPointsRef = useRef<number[]>([0]);
   snapPointsRef.current = useMemo(() => {
-    const pts = [0, project.playheadSec];
+    const pts = [0, playheadRef.current];
     project.clips.forEach((c) => {
       pts.push(c.startSec, c.startSec + c.durationSec);
     });
     return pts;
-  }, [project.clips, project.playheadSec]);
+  }, [project.clips]);
 
   const snapTime = (rawSec: number, ignoreStartEndOfClip?: ActiveDragSession): number => {
     for (const pt of snapPointsRef.current) {
       if (
         ignoreStartEndOfClip &&
         (Math.abs(pt - ignoreStartEndOfClip.origStartSec) < 0.001 ||
-          Math.abs(pt - (ignoreStartEndOfClip.origStartSec + ignoreStartEndOfClip.origDurationSec)) < 0.001)
+          Math.abs(pt - (ignoreStartEndOfClip.origStartSec + ignoreStartEndOfClip.origDurationSec)) <
+            0.001)
       ) {
         continue;
       }
@@ -194,10 +198,7 @@ export function CapCutTimeline({
     }
   };
 
-  const beginDragSession = (
-    pointerId: number,
-    session: ActiveDragSession
-  ) => {
+  const beginDragSession = useCallback((pointerId: number, session: ActiveDragSession) => {
     dragRef.current = session;
     pendingClientXRef.current = session.startClientX;
     if (session.mode === 'trim-left' || session.mode === 'trim-right') {
@@ -208,7 +209,39 @@ export function CapCutTimeline({
     } catch {
       // ignore if pointer capture is unavailable
     }
-  };
+  }, []);
+
+  const handleSelectClipById = useCallback(
+    (clipId: string) => {
+      onSelectClip(clipId);
+    },
+    [onSelectClip]
+  );
+
+  const handleStartClipDrag = useCallback(
+    (clip: Clip, mode: TimelineDragMode, clientX: number, pointerId: number) => {
+      beginDragSession(pointerId, {
+        mode,
+        clipId: clip.id,
+        startClientX: clientX,
+        origPlayheadSec: playheadRef.current,
+        origStartSec: clip.startSec,
+        origDurationSec: clip.durationSec,
+        origTrimStartSec: clip.trimStartSec,
+        allowNegativeExtend:
+          clip.sourceType !== 'local-video' && clip.sourceType !== 'local-audio',
+      });
+    },
+    [beginDragSession]
+  );
+
+  const handleJumpToKeyframe = useCallback(
+    (clipId: string, sec: number) => {
+      onSelectClip(clipId);
+      onSeek(sec);
+    },
+    [onSelectClip, onSeek]
+  );
 
   const endDragSession = () => {
     const finished = dragRef.current;
@@ -243,7 +276,7 @@ export function CapCutTimeline({
         beginDragSession(e.pointerId, {
           mode: 'scroll-timeline',
           startClientX: e.clientX,
-          origPlayheadSec: project.playheadSec,
+          origPlayheadSec: playheadRef.current,
           origStartSec: 0,
           origDurationSec: 0,
           origTrimStartSec: 0,
@@ -253,8 +286,42 @@ export function CapCutTimeline({
       onPointerMove={handlePointerMove}
       onPointerUp={endDragSession}
       onPointerCancel={endDragSession}
-      className="flex-1 min-h-[205px] max-h-[275px] bg-[#0B0B0D] relative overflow-hidden select-none touch-none cursor-ew-resize flex flex-col"
+      className="flex-1 min-h-[235px] bg-[#0B0B0D] relative overflow-hidden select-none touch-none cursor-ew-resize flex flex-col"
     >
+      {/* Fixed Left Controls: Jump to 00:00 & Main Audio Mute (Never Clipped) */}
+      <div
+        onPointerDown={(e) => e.stopPropagation()}
+        className="absolute top-1 left-2 z-50 flex items-center gap-1"
+      >
+        <button
+          type="button"
+          aria-label="Jump to start 00:00"
+          title="Jump to 00:00"
+          onClick={() => onSeek(0)}
+          className="px-1.5 py-0.5 rounded bg-[#141418]/90 hover:bg-[#1E1E26] border border-[#24242C] text-[10px] font-mono text-[#00CAE0] flex items-center gap-1 cursor-pointer"
+        >
+          <SkipBack className="w-3 h-3" />
+          <span>00:00</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleMainMute();
+          }}
+          title={mainTrack.muted ? 'Unmute clip audio' : 'Mute clip audio'}
+          className="px-2 py-0.5 rounded bg-[#141418]/90 hover:bg-[#1E1E26] border border-[#24242C] flex items-center gap-1 text-[10px] text-[#A1A1AE] hover:text-white cursor-pointer"
+        >
+          {mainTrack.muted ? (
+            <VolumeX className="w-3 h-3 text-[#F59E0B]" />
+          ) : (
+            <Volume2 className="w-3 h-3" />
+          )}
+          <span className="hidden sm:inline">{mainTrack.muted ? 'Muted' : 'Audio'}</span>
+        </button>
+      </div>
+
       {/* Floating Zoom Buttons */}
       <div
         onPointerDown={(e) => e.stopPropagation()}
@@ -285,25 +352,15 @@ export function CapCutTimeline({
       >
         <RulerTrack rulerSecCount={rulerSecCount} pxPerSec={pxPerSec} />
 
-        {/* Tracks Container */}
-        <div className="flex-1 overflow-y-auto py-3 space-y-2.5 relative">
-          <button
-            type="button"
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleMainMute();
-            }}
-            title={mainTrack.muted ? 'Unmute clip audio' : 'Mute clip audio'}
-            style={{ left: `-48px` }}
-            className="absolute top-5 w-10 h-10 rounded-lg bg-[#16161B] border border-[#26262E] flex items-center justify-center text-[#A1A1AE] hover:text-white cursor-pointer"
-          >
-            {mainTrack.muted ? (
-              <VolumeX className="w-3.5 h-3.5 text-[#F59E0B]" />
-            ) : (
-              <Volume2 className="w-3.5 h-3.5" />
-            )}
-          </button>
+        {/* Persistent 00:00 Starting Line across all tracks */}
+        <div
+          aria-hidden="true"
+          style={{ left: '0px' }}
+          className="absolute top-6 bottom-0 w-[2px] bg-[#00CAE0]/75 pointer-events-none z-20"
+        />
+
+        {/* Tracks Container (no overflow-x clipping on 00:00 edge) */}
+        <div className="flex-1 overflow-y-auto overflow-x-visible py-3 space-y-2.5 relative">
 
           {/* MAIN VIDEO TRACK */}
           <div className="h-[54px] relative">
@@ -315,24 +372,9 @@ export function CapCutTimeline({
                 isSelected={project.selectedClipId === clip.id}
                 isTrimming={trimmingClipId === clip.id}
                 variant="video"
-                onSelect={() => onSelectClip(clip.id)}
-                onStartDrag={(mode, clientX, pointerId) =>
-                  beginDragSession(pointerId, {
-                    mode,
-                    clipId: clip.id,
-                    startClientX: clientX,
-                    origPlayheadSec: project.playheadSec,
-                    origStartSec: clip.startSec,
-                    origDurationSec: clip.durationSec,
-                    origTrimStartSec: clip.trimStartSec,
-                    allowNegativeExtend:
-                      clip.sourceType !== 'local-video' && clip.sourceType !== 'local-audio',
-                  })
-                }
-                onJumpToKeyframe={(kfSec) => {
-                  onSelectClip(clip.id);
-                  onSeek(kfSec);
-                }}
+                onSelectClip={handleSelectClipById}
+                onStartDrag={handleStartClipDrag}
+                onJumpToKeyframe={handleJumpToKeyframe}
               />
             ))}
 
@@ -403,24 +445,9 @@ export function CapCutTimeline({
                     isSelected={project.selectedClipId === clip.id}
                     isTrimming={trimmingClipId === clip.id}
                     variant={clip.sourceType === 'demo-text' ? 'text' : 'overlay'}
-                    onSelect={() => onSelectClip(clip.id)}
-                    onStartDrag={(mode, clientX, pointerId) =>
-                      beginDragSession(pointerId, {
-                        mode,
-                        clipId: clip.id,
-                        startClientX: clientX,
-                        origPlayheadSec: project.playheadSec,
-                        origStartSec: clip.startSec,
-                        origDurationSec: clip.durationSec,
-                        origTrimStartSec: clip.trimStartSec,
-                        allowNegativeExtend:
-                          clip.sourceType !== 'local-video' && clip.sourceType !== 'local-audio',
-                      })
-                    }
-                    onJumpToKeyframe={(kfSec) => {
-                      onSelectClip(clip.id);
-                      onSeek(kfSec);
-                    }}
+                    onSelectClip={handleSelectClipById}
+                    onStartDrag={handleStartClipDrag}
+                    onJumpToKeyframe={handleJumpToKeyframe}
                   />
                 ))}
 
@@ -475,23 +502,9 @@ export function CapCutTimeline({
                     isSelected={project.selectedClipId === clip.id}
                     isTrimming={trimmingClipId === clip.id}
                     variant="audio"
-                    onSelect={() => onSelectClip(clip.id)}
-                    onStartDrag={(mode, clientX, pointerId) =>
-                      beginDragSession(pointerId, {
-                        mode,
-                        clipId: clip.id,
-                        startClientX: clientX,
-                        origPlayheadSec: project.playheadSec,
-                        origStartSec: clip.startSec,
-                        origDurationSec: clip.durationSec,
-                        origTrimStartSec: clip.trimStartSec,
-                        allowNegativeExtend: clip.sourceType !== 'local-audio',
-                      })
-                    }
-                    onJumpToKeyframe={(kfSec) => {
-                      onSelectClip(clip.id);
-                      onSeek(kfSec);
-                    }}
+                    onSelectClip={handleSelectClipById}
+                    onStartDrag={handleStartClipDrag}
+                    onJumpToKeyframe={handleJumpToKeyframe}
                   />
                 ))}
               </div>
@@ -566,7 +579,13 @@ const RulerTrack = React.memo(function RulerTrack({
           style={{ left: `${sec * pxPerSec}px` }}
           className="absolute top-0 bottom-0 flex items-center pointer-events-none"
         >
-          <span className="text-[10px] font-mono tabular-nums text-[#7C7C88] -translate-x-1/2">
+          <span
+            className={`text-[10px] font-mono tabular-nums ${
+              sec === 0
+                ? 'text-[#00CAE0] font-bold translate-x-1'
+                : 'text-[#7C7C88] -translate-x-1/2'
+            }`}
+          >
             {String(Math.floor(sec / 60)).padStart(2, '0')}:{String(sec % 60).padStart(2, '0')}
           </span>
           <span
@@ -585,9 +604,9 @@ interface ClipStripProps {
   isSelected: boolean;
   isTrimming: boolean;
   variant: 'video' | 'overlay' | 'text' | 'audio';
-  onSelect: () => void;
-  onStartDrag: (mode: TimelineDragMode, clientX: number, pointerId: number) => void;
-  onJumpToKeyframe: (sec: number) => void;
+  onSelectClip: (clipId: string) => void;
+  onStartDrag: (clip: Clip, mode: TimelineDragMode, clientX: number, pointerId: number) => void;
+  onJumpToKeyframe: (clipId: string, sec: number) => void;
 }
 
 const ClipStrip = React.memo(function ClipStrip({
@@ -596,7 +615,7 @@ const ClipStrip = React.memo(function ClipStrip({
   isSelected,
   isTrimming,
   variant,
-  onSelect,
+  onSelectClip,
   onStartDrag,
   onJumpToKeyframe,
 }: ClipStripProps) {
@@ -619,8 +638,8 @@ const ClipStrip = React.memo(function ClipStrip({
       style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
       onPointerDown={(e) => {
         e.stopPropagation();
-        onSelect();
-        onStartDrag('move-clip', e.clientX, e.pointerId);
+        onSelectClip(clip.id);
+        onStartDrag(clip, 'move-clip', e.clientX, e.pointerId);
       }}
       className={`absolute top-0 bottom-0 cursor-grab active:cursor-grabbing ${
         isSelected ? 'z-20' : 'z-10'
@@ -683,7 +702,7 @@ const ClipStrip = React.memo(function ClipStrip({
               type="button"
               onPointerDown={(e) => {
                 e.stopPropagation();
-                onJumpToKeyframe(clip.startSec + kf.timeOffset);
+                onJumpToKeyframe(clip.id, clip.startSec + kf.timeOffset);
               }}
               style={{ left: `${kfLeft}px` }}
               title={`Keyframe ${kf.timeOffset.toFixed(2)}s`}
@@ -702,12 +721,12 @@ const ClipStrip = React.memo(function ClipStrip({
         </div>
       )}
 
-      {/* Left Start-Trim / Crop Handle (Easy to grab even before selection) */}
+      {/* Left Start-Trim / Crop Handle */}
       <div
         onPointerDown={(e) => {
           e.stopPropagation();
-          onSelect();
-          onStartDrag('trim-left', e.clientX, e.pointerId);
+          onSelectClip(clip.id);
+          onStartDrag(clip, 'trim-left', e.clientX, e.pointerId);
         }}
         title="Drag to trim/resize start"
         className={`absolute -left-1.5 top-0 bottom-0 w-5 flex items-center justify-start cursor-ew-resize z-30 ${
@@ -723,8 +742,8 @@ const ClipStrip = React.memo(function ClipStrip({
       <div
         onPointerDown={(e) => {
           e.stopPropagation();
-          onSelect();
-          onStartDrag('trim-right', e.clientX, e.pointerId);
+          onSelectClip(clip.id);
+          onStartDrag(clip, 'trim-right', e.clientX, e.pointerId);
         }}
         title="Drag to trim/resize end"
         className={`absolute -right-1.5 top-0 bottom-0 w-5 flex items-center justify-end cursor-ew-resize z-30 ${

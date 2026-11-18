@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Smartphone } from 'lucide-react';
-import { ApkBuildHub } from './components/ApkBuildHub';
+import { ArrowLeft } from 'lucide-react';
+import { AnimatePresence } from 'motion/react';
+import { BootSplash } from './components/BootSplash';
 import { BottomSheetTool, CapCutBottomDock } from './components/CapCutBottomDock';
-import { CapCutHome } from './components/CapCutHome';
+import { CapCutHome, QuickPresetKind } from './components/CapCutHome';
 import { CapCutTimeline, TimelineDragMode } from './components/CapCutTimeline';
 import { ExportModal } from './components/ExportModal';
 import { InAppMediaPicker, SelectedGalleryItem } from './components/InAppMediaPicker';
 import { MemeLibrarySheet } from './components/MemeLibrarySheet';
 import { PreviewStage } from './components/PreviewStage';
+import { SvgStickerSheet } from './components/SvgStickerSheet';
 import {
+  INTRO_OUTRO_TEMPLATES,
   IntroOutroTemplate,
   loadGoogleFont,
   MemeLibraryItem,
@@ -40,14 +43,16 @@ import {
   SpeedPoint,
   SpeedPreset,
   TextAnimationType,
+  TextStylePreset,
   Track,
   TransitionType,
   VideoEffectType,
 } from './types/editor';
 
-type ScreenMode = 'home' | 'editor' | 'apk';
+type ScreenMode = 'home' | 'editor';
 
 export default function App() {
+  const [showSplash, setShowSplash] = useState(true);
   const [projects, setProjects] = useState<ProjectState[]>(() => [
     createInitialDemoProject(),
   ]);
@@ -58,6 +63,7 @@ export default function App() {
   const [activeSheet, setActiveSheet] = useState<BottomSheetTool>(null);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showMemeLibrary, setShowMemeLibrary] = useState(false);
+  const [showSvgStickers, setShowSvgStickers] = useState(false);
   const [galleryMode, setGalleryMode] = useState<
     null | { mode: 'new-project'; ratio: AspectRatio } | { mode: 'main' } | { mode: 'overlay' }
   >(null);
@@ -69,6 +75,7 @@ export default function App() {
     Map<string, HTMLVideoElement | HTMLImageElement | HTMLAudioElement>
   >(new Map());
   const triggeredSfxRef = useRef<Set<string>>(new Set());
+  const previewTimerRef = useRef<number | null>(null);
 
   const project =
     projects.find((p) => p.id === activeProjectId) ?? projects[0];
@@ -334,7 +341,9 @@ export default function App() {
         sourceType: 'demo-text',
         textContent: 'YOUR TEXT',
         textColor: '#FFFFFF',
-        fontFamily: 'Outfit',
+        fontFamily: 'Orbitron',
+        fontSize: 78,
+        textStyle: 'outline',
         textAnimation: 'pop-bounce',
         startSec: Math.round(prev.playheadSec * 100) / 100,
         durationSec: 3.0,
@@ -358,6 +367,148 @@ export default function App() {
       };
     });
     setActiveSheet('text');
+  };
+
+  const handleAddSvgSticker = (name: string, svgMarkup: string, accentHex: string) => {
+    const newId = `clip-svg-${Date.now()}`;
+    commitProjectChange((prev) => {
+      let overlayTrack = prev.tracks.find((t) => t.type === 'overlay');
+      const nextTracks = [...prev.tracks];
+      if (!overlayTrack) {
+        overlayTrack = {
+          id: `track-overlay-${Date.now()}`,
+          label: 'Layer 1',
+          type: 'overlay',
+          muted: false,
+          locked: false,
+          hidden: false,
+        };
+        nextTracks.push(overlayTrack);
+      }
+
+      const svgClip: Clip = {
+        id: newId,
+        trackId: overlayTrack.id,
+        name,
+        sourceType: 'svg-sticker',
+        svgMarkup,
+        svgAccent: accentHex,
+        startSec: Math.round(prev.playheadSec * 100) / 100,
+        durationSec: 3.0,
+        trimStartSec: 0,
+        volume: 0,
+        chromaKey: { enabled: false, targetHex: '#00FF00', similarity: 40, smoothness: 15 },
+        speedRamp: {
+          preset: 'normal',
+          points: SPEED_PRESETS.normal.points.map((p) => ({ ...p })),
+        },
+        keyframes: [
+          { id: `${newId}-kf1`, timeOffset: 0, x: 0, y: 0, scale: 0.9, rotation: 0, opacity: 1 },
+        ],
+      };
+
+      return {
+        ...prev,
+        tracks: nextTracks,
+        selectedClipId: newId,
+        clips: [...prev.clips, svgClip],
+      };
+    });
+    setActiveSheet('motion');
+  };
+
+  const handleImportDirectUrl = (url: string) => {
+    const cleanName = decodeURIComponent(url.split('/').pop()?.split('?')[0] || 'Web Asset').slice(0, 28);
+    const lower = url.toLowerCase();
+    const isAudio = /\.(mp3|wav|ogg|m4a|aac)(\?|$)/.test(lower);
+    const isVideo = /\.(mp4|webm|mov|m4v)(\?|$)/.test(lower);
+
+    if (isAudio) {
+      const asset: MediaAsset = {
+        id: `asset-url-${Date.now()}`,
+        name: cleanName || 'Web Audio',
+        kind: 'audio',
+        url,
+        durationSec: 12.0,
+        waveform: fallbackWaveform(48),
+      };
+      setDeviceAssets((prev) => [asset, ...prev]);
+      appendGalleryItemsToProject(project.id, [{ kind: 'asset', asset }], false);
+    } else if (isVideo) {
+      const asset: MediaAsset = {
+        id: `asset-url-${Date.now()}`,
+        name: cleanName || 'Web Video',
+        kind: 'video',
+        url,
+        durationSec: 5.0,
+        thumbnails: [],
+      };
+      setDeviceAssets((prev) => [asset, ...prev]);
+      appendGalleryItemsToProject(project.id, [{ kind: 'asset', asset }], true);
+    } else {
+      const asset: MediaAsset = {
+        id: `asset-url-${Date.now()}`,
+        name: cleanName || 'Web Meme / SVG',
+        kind: 'image',
+        url,
+        durationSec: 4.0,
+        thumbnails: [url],
+      };
+      setDeviceAssets((prev) => [asset, ...prev]);
+      appendGalleryItemsToProject(project.id, [{ kind: 'asset', asset }], true);
+    }
+  };
+
+  const handlePreviewSegment = (startSec: number) => {
+    if (previewTimerRef.current !== null) {
+      window.clearTimeout(previewTimerRef.current);
+      previewTimerRef.current = null;
+    }
+    commitProjectChange(
+      (prev) => ({
+        ...prev,
+        playheadSec: Math.max(0, Math.min(totalDuration - 0.1, startSec)),
+        isPlaying: true,
+      }),
+      false
+    );
+    previewTimerRef.current = window.setTimeout(() => {
+      previewTimerRef.current = null;
+      commitProjectChange((prev) => ({ ...prev, isPlaying: false }), false);
+    }, 1850);
+  };
+
+  const handleOpenSmartFx = (sheet: 'effects' | 'transition') => {
+    const mainTrack = project.tracks.find((t) => t.type === 'video') ?? project.tracks[0];
+    let targetClip =
+      project.clips.find(
+        (c) =>
+          c.sourceType !== 'local-audio' &&
+          c.sourceType !== 'demo-audio' &&
+          c.sourceType !== 'meme-sfx' &&
+          project.playheadSec >= c.startSec &&
+          project.playheadSec <= c.startSec + c.durationSec
+      ) ?? null;
+
+    if (sheet === 'transition') {
+      const mainSorted = project.clips
+        .filter((c) => c.trackId === mainTrack.id)
+        .sort((a, b) => a.startSec - b.startSec);
+      targetClip = mainSorted[1] ?? mainSorted[0] ?? targetClip;
+    } else if (!targetClip) {
+      targetClip = project.clips.find((c) => c.trackId === mainTrack.id) ?? project.clips[0] ?? null;
+    }
+
+    if (!targetClip) {
+      setGalleryMode({ mode: 'main' });
+      return;
+    }
+
+    commitProjectChange(
+      (prev) => ({ ...prev, selectedClipId: targetClip!.id }),
+      false
+    );
+    setActiveSheet(sheet);
   };
 
   const handleApplyIntroOutro = async (tpl: IntroOutroTemplate) => {
@@ -564,8 +715,10 @@ export default function App() {
     Array.from(files).forEach((file) => {
       const url = URL.createObjectURL(file);
       const assetId = `asset-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      const isAudio = file.type.startsWith('audio/');
-      const isImage = file.type.startsWith('image/');
+      const isAudio =
+        file.type.startsWith('audio/') || /\.(mp3|wav|ogg|m4a|aac)$/i.test(file.name);
+      const isImage =
+        file.type.startsWith('image/') || /\.(svg|png|jpe?g|webp|gif)$/i.test(file.name);
 
       if (isImage) {
         const img = new Image();
@@ -798,9 +951,137 @@ export default function App() {
     );
   };
 
+  const handleDuplicateProject = (projId: string) => {
+    setProjects((prev) => {
+      const orig = prev.find((p) => p.id === projId);
+      if (!orig) return prev;
+      const newId = `proj-${Date.now()}`;
+      const cloned: ProjectState = {
+        ...orig,
+        id: newId,
+        name: `${orig.name} Copy`,
+        updatedAt: Date.now(),
+        isPlaying: false,
+        tracks: orig.tracks.map((t) => ({ ...t })),
+        clips: orig.clips.map((c) => ({
+          ...c,
+          keyframes: c.keyframes.map((k) => ({ ...k })),
+          speedRamp: {
+            ...c.speedRamp,
+            points: c.speedRamp.points.map((pt) => ({ ...pt })),
+          },
+          chromaKey: { ...c.chromaKey },
+        })),
+      };
+      return [cloned, ...prev];
+    });
+  };
+
+  const handleLaunchPreset = (preset: QuickPresetKind, ratio: AspectRatio) => {
+    setUndoStack([]);
+    setRedoStack([]);
+    if (preset === 'meme-vault') {
+      const newProj = createBlankProject(`Meme Edit ${projects.length + 1}`, ratio, 60);
+      setProjects((prev) => [newProj, ...prev]);
+      setActiveProjectId(newProj.id);
+      setActiveSheet(null);
+      setScreen('editor');
+      setShowMemeLibrary(true);
+      return;
+    }
+
+    if (preset === 'glitch-intro') {
+      const tpl = INTRO_OUTRO_TEMPLATES[0];
+      void loadGoogleFont({
+        name: tpl.fontFamily,
+        category: 'Gaming',
+        googleFamily: tpl.fontFamily.replace(/\s+/g, '+'),
+        previewText: tpl.headline,
+      });
+      const base = createBlankProject('Cyber Intro FX', ratio, 60);
+      const mainTrack = base.tracks.find((t) => t.type === 'video') ?? base.tracks[0];
+      const overlayTrack = base.tracks.find((t) => t.type === 'overlay') ?? base.tracks[1];
+      const thumb = generateStockThumbnailDataUrl(tpl.stockVariant);
+      const bgId = `clip-tpl-bg-${Date.now()}`;
+      const txtId = `clip-tpl-txt-${Date.now()}`;
+      const bgClip: Clip = {
+        id: bgId,
+        trackId: mainTrack.id,
+        name: tpl.name,
+        sourceType: 'stock-clip',
+        stockVariant: tpl.stockVariant,
+        thumbnails: thumb ? [thumb] : [],
+        startSec: 0,
+        durationSec: tpl.durationSec,
+        trimStartSec: 0,
+        volume: 0,
+        effect: { type: 'rgb-glitch', intensity: 65 },
+        transitionIn: { type: 'glitch-cut', durationSec: 0.4 },
+        chromaKey: { enabled: false, targetHex: '#00FF00', similarity: 40, smoothness: 15 },
+        speedRamp: {
+          preset: 'normal',
+          points: SPEED_PRESETS.normal.points.map((p) => ({ ...p })),
+        },
+        keyframes: [],
+      };
+      const txtClip: Clip = {
+        id: txtId,
+        trackId: overlayTrack.id,
+        name: tpl.headline,
+        sourceType: 'demo-text',
+        textContent: tpl.headline,
+        textColor: tpl.colorHex,
+        fontFamily: tpl.fontFamily,
+        textAnimation: tpl.textAnimation,
+        startSec: 0,
+        durationSec: tpl.durationSec,
+        trimStartSec: 0,
+        volume: 0,
+        chromaKey: { enabled: false, targetHex: '#00FF00', similarity: 40, smoothness: 15 },
+        speedRamp: {
+          preset: 'normal',
+          points: SPEED_PRESETS.normal.points.map((p) => ({ ...p })),
+        },
+        keyframes: [
+          { id: `${txtId}-kf1`, timeOffset: 0, x: 0, y: 0, scale: 1.0, rotation: 0, opacity: 1 },
+        ],
+      };
+      const introProj: ProjectState = {
+        ...base,
+        playheadSec: 0.8,
+        selectedClipId: bgId,
+        clips: [bgClip, txtClip],
+      };
+      setProjects((prev) => [introProj, ...prev]);
+      setActiveProjectId(introProj.id);
+      setActiveSheet('effects');
+      setScreen('editor');
+      return;
+    }
+
+    const demo = createInitialDemoProject();
+    const newId = `proj-${Date.now()}`;
+    const presetProj: ProjectState = {
+      ...demo,
+      id: newId,
+      name: preset === 'velocity' ? 'Velocity Montage' : 'Keyframes & Chroma',
+      aspectRatio: ratio,
+      updatedAt: Date.now(),
+      playheadSec: preset === 'velocity' ? 4.6 : 1.4,
+      selectedClipId: preset === 'velocity' ? 'clip-clutch-hit' : 'clip-text-kill',
+    };
+    setProjects((prev) => [presetProj, ...prev]);
+    setActiveProjectId(newId);
+    setActiveSheet(preset === 'velocity' ? 'speed' : 'chroma');
+    setScreen('editor');
+  };
+
   if (screen === 'home') {
     return (
       <>
+        <AnimatePresence>
+          {showSplash && <BootSplash onComplete={() => setShowSplash(false)} />}
+        </AnimatePresence>
         <CapCutHome
           projects={projects}
           onOpenProject={(id) => {
@@ -820,6 +1101,8 @@ export default function App() {
             setActiveSheet(null);
             setScreen('editor');
           }}
+          onLaunchPreset={handleLaunchPreset}
+          onDuplicateProject={handleDuplicateProject}
           onDeleteProject={(projId) => {
             setProjects((prev) => {
               const remaining = prev.filter((p) => p.id !== projId);
@@ -828,7 +1111,6 @@ export default function App() {
               return remaining;
             });
           }}
-          onOpenApkHub={() => setScreen('apk')}
         />
 
         {galleryMode && (
@@ -855,12 +1137,11 @@ export default function App() {
     );
   }
 
-  if (screen === 'apk') {
-    return <ApkBuildHub onBack={() => setScreen('home')} />;
-  }
-
   return (
     <div className="h-screen w-screen overflow-hidden flex flex-col bg-[#000000] text-[#F5F5F7]">
+      <AnimatePresence>
+        {showSplash && <BootSplash onComplete={() => setShowSplash(false)} />}
+      </AnimatePresence>
       {/* Slim CapCut Top Header */}
       <header className="h-12 px-3 sm:px-4 bg-[#000000] border-b border-[#16161B] flex items-center justify-between shrink-0">
         <button
@@ -888,14 +1169,6 @@ export default function App() {
           >
             1080P · {project.fps}fps
           </button>
-          <button
-            type="button"
-            onClick={() => setScreen('apk')}
-            aria-label="Open Android APK Builder"
-            className="p-1.5 rounded bg-[#16161B] text-[#A1A1AE] hover:text-white cursor-pointer"
-          >
-            <Smartphone className="w-4 h-4" />
-          </button>
         </div>
 
         <button
@@ -914,7 +1187,11 @@ export default function App() {
         canRedo={redoStack.length > 0}
         onUndo={handleUndo}
         onRedo={handleRedo}
-        onTogglePlay={() =>
+        onTogglePlay={() => {
+          if (previewTimerRef.current !== null) {
+            window.clearTimeout(previewTimerRef.current);
+            previewTimerRef.current = null;
+          }
           commitProjectChange(
             (prev) => ({
               ...prev,
@@ -923,8 +1200,8 @@ export default function App() {
                 prev.playheadSec >= totalDuration - 0.05 ? 0 : prev.playheadSec,
             }),
             false
-          )
-        }
+          );
+        }}
         onAddKeyframe={handleToggleKeyframeAtPlayhead}
         onDragSelectedClip={(x, y) => handleUpsertKeyframe({ x, y }, false)}
         onQuickImport={() => setGalleryMode({ mode: 'main' })}
@@ -1054,11 +1331,14 @@ export default function App() {
         activeSheet={activeSheet}
         customFonts={customFonts}
         onChangeSheet={setActiveSheet}
+        onOpenSmartFx={handleOpenSmartFx}
+        onPreviewSegment={handlePreviewSegment}
         onDeselectClip={() =>
           commitProjectChange((prev) => ({ ...prev, selectedClipId: null }), false)
         }
         onOpenMediaPicker={(mode) => setGalleryMode({ mode })}
         onOpenMemes={() => setShowMemeLibrary(true)}
+        onOpenSvgStickers={() => setShowSvgStickers(true)}
         onImportAudio={(files) => handleImportDeviceFiles(files, false)}
         onAddSfxItem={handleAddMeme}
         onAddTextClip={handleAddTextClip}
@@ -1090,6 +1370,16 @@ export default function App() {
             textContent,
             textColor,
           }))
+        }
+        onUpdateTextStyle={(textStyle: TextStylePreset, fontSize?: number) =>
+          updateSelectedClip((clip) => ({
+            ...clip,
+            textStyle,
+            fontSize: fontSize ?? clip.fontSize ?? 74,
+          }))
+        }
+        onUpdateSvgColor={(svgAccent: string) =>
+          updateSelectedClip((clip) => ({ ...clip, svgAccent }))
         }
         onUpdateFont={(fontFamily) =>
           updateSelectedClip((clip) => ({ ...clip, fontFamily }))
@@ -1155,7 +1445,16 @@ export default function App() {
         <MemeLibrarySheet
           onAddMeme={handleAddMeme}
           onImportFiles={(files, asOverlay) => handleImportDeviceFiles(files, Boolean(asOverlay))}
+          onImportDirectUrl={handleImportDirectUrl}
+          onOpenSvgStickers={() => setShowSvgStickers(true)}
           onClose={() => setShowMemeLibrary(false)}
+        />
+      )}
+
+      {showSvgStickers && (
+        <SvgStickerSheet
+          onAddSvgSticker={handleAddSvgSticker}
+          onClose={() => setShowSvgStickers(false)}
         />
       )}
 

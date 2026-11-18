@@ -1,4 +1,13 @@
-import { Clip, Keyframe, ProjectState, SpeedPoint, TextAnimationType, VideoEffectType } from '../types/editor';
+import {
+  Clip,
+  Keyframe,
+  ProjectState,
+  SpeedPoint,
+  TextAnimationType,
+  TextStylePreset,
+  VideoEffectType,
+} from '../types/editor';
+import { svgMarkupToDataUrl } from '../data/svgStickers';
 
 export interface InterpolatedTransform {
   x: number;
@@ -12,6 +21,7 @@ let cachedFastCanvas: HTMLCanvasElement | null = null;
 let cachedFastCtx: CanvasRenderingContext2D | null = null;
 let cachedChromaCanvas: HTMLCanvasElement | null = null;
 let cachedChromaCtx: CanvasRenderingContext2D | null = null;
+const svgImageCache = new Map<string, HTMLImageElement>();
 
 function getOffscreenTarget(
   width: number,
@@ -433,6 +443,38 @@ function drawMemeCard(
   ctx.restore();
 }
 
+function drawSvgSticker(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  clip: Clip,
+  localTime: number
+): void {
+  const markup = clip.svgMarkup;
+  if (!markup) return;
+  const accent = clip.svgAccent || '#00CAE0';
+  const cacheKey = `${accent}::${markup}`;
+  let img = svgImageCache.get(cacheKey);
+  if (!img) {
+    img = new Image();
+    img.src = svgMarkupToDataUrl(markup, accent);
+    svgImageCache.set(cacheKey, img);
+  }
+  if (!img.complete || img.naturalWidth === 0) return;
+
+  const pop = localTime < 0.22 ? 0.55 + (localTime / 0.22) * 0.45 : 1.0;
+  const targetBox = Math.min(w, h) * 0.44 * pop;
+  const aspect = img.naturalWidth / Math.max(1, img.naturalHeight);
+  const drawW = aspect >= 1 ? targetBox : targetBox * aspect;
+  const drawH = aspect >= 1 ? targetBox / aspect : targetBox;
+
+  ctx.save();
+  ctx.shadowColor = accent;
+  ctx.shadowBlur = 18;
+  ctx.drawImage(img, (w - drawW) / 2, (h - drawH) / 2, drawW, drawH);
+  ctx.restore();
+}
+
 function drawAnimatedText(
   ctx: CanvasRenderingContext2D,
   w: number,
@@ -442,7 +484,9 @@ function drawAnimatedText(
 ): void {
   const fullText = clip.textContent || clip.name;
   const anim: TextAnimationType = clip.textAnimation || 'none';
+  const stylePreset: TextStylePreset = clip.textStyle || 'outline';
   const fontFam = clip.fontFamily || 'Outfit';
+  const fontSize = Math.max(28, Math.min(140, clip.fontSize || 74));
   const color = clip.textColor || '#FFFFFF';
 
   let visibleText = fullText;
@@ -457,15 +501,15 @@ function drawAnimatedText(
     visibleText = fullText.slice(0, chars);
   } else if (anim === 'pop-bounce') {
     const p = Math.min(1, localTime / 0.35);
-    extraScale = p < 0.7 ? (p / 0.7) * 1.22 : 1.22 - ((p - 0.7) / 0.3) * 0.22;
+    extraScale = p < 0.7 ? (p / 0.7) * 1.24 : 1.24 - ((p - 0.7) / 0.3) * 0.24;
   } else if (anim === 'slide-up') {
     const p = Math.min(1, localTime / 0.4);
     offsetY = (1 - cubicEaseInOut(p)) * 90;
     extraAlpha = p;
   } else if (anim === 'glitch-flicker') {
     if (localTime < 0.45 || Math.floor(localTime * 12) % 9 === 0) {
-      offsetX = Math.sin(localTime * 90) * 10;
-      extraAlpha = 0.75 + Math.sin(localTime * 60) * 0.25;
+      offsetX = Math.sin(localTime * 90) * 12;
+      extraAlpha = 0.78 + Math.sin(localTime * 60) * 0.22;
     }
   } else if (anim === 'neon-pulse') {
     extraScale = 1 + Math.sin(localTime * 6) * 0.06;
@@ -479,13 +523,73 @@ function drawAnimatedText(
   ctx.translate(w / 2 + offsetX, h / 2 + offsetY);
   ctx.scale(extraScale, extraScale);
   ctx.globalAlpha = Math.max(0, Math.min(1, extraAlpha));
-  ctx.fillStyle = color;
-  ctx.font = `700 68px "${fontFam}", "Outfit", sans-serif`;
+  ctx.font = `800 ${fontSize}px "${fontFam}", "Outfit", sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.shadowColor = anim === 'neon-pulse' ? color : 'rgba(0, 0, 0, 0.85)';
-  ctx.shadowBlur = anim === 'neon-pulse' ? 28 : 16;
-  ctx.fillText(visibleText, 0, 0);
+
+  const textWidth = ctx.measureText(visibleText).width;
+
+  if (stylePreset === 'cyber-box') {
+    const padX = 28;
+    const boxH = fontSize * 1.32;
+    const boxW = textWidth + padX * 2;
+    ctx.fillStyle = 'rgba(8, 10, 15, 0.88)';
+    ctx.strokeStyle = color === '#FFFFFF' ? '#00CAE0' : color;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.roundRect(-boxW / 2, -boxH / 2, boxW, boxH, 14);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = color;
+    ctx.fillText(visibleText, 0, 2);
+  } else if (stylePreset === '3d-pop') {
+    const depth = Math.max(4, Math.round(fontSize * 0.09));
+    ctx.fillStyle = '#0B0F1A';
+    for (let d = depth; d >= 1; d--) {
+      ctx.fillText(visibleText, d * 1.1, d * 1.2);
+    }
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = Math.max(5, fontSize * 0.1);
+    ctx.strokeText(visibleText, 0, 0);
+    ctx.fillStyle = color;
+    ctx.fillText(visibleText, 0, 0);
+  } else if (stylePreset === 'gradient-fire') {
+    const grad = ctx.createLinearGradient(-textWidth / 2, -fontSize / 2, textWidth / 2, fontSize / 2);
+    grad.addColorStop(0, '#00CAE0');
+    grad.addColorStop(0.5, '#FFFFFF');
+    grad.addColorStop(1, color === '#FFFFFF' ? '#34D399' : color);
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#050508';
+    ctx.lineWidth = Math.max(6, fontSize * 0.12);
+    ctx.strokeText(visibleText, 0, 0);
+    ctx.fillStyle = grad;
+    ctx.fillText(visibleText, 0, 0);
+  } else if (stylePreset === 'neon-glow') {
+    const glowColor = color === '#FFFFFF' ? '#00CAE0' : color;
+    ctx.shadowColor = glowColor;
+    ctx.shadowBlur = 32;
+    ctx.strokeStyle = glowColor;
+    ctx.lineWidth = 4;
+    ctx.strokeText(visibleText, 0, 0);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillText(visibleText, 0, 0);
+  } else if (stylePreset === 'outline') {
+    ctx.lineJoin = 'round';
+    ctx.shadowColor = 'rgba(0,0,0,0.85)';
+    ctx.shadowBlur = 14;
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = Math.max(7, fontSize * 0.15);
+    ctx.strokeText(visibleText, 0, 0);
+    ctx.fillStyle = color;
+    ctx.fillText(visibleText, 0, 0);
+  } else {
+    ctx.fillStyle = color;
+    ctx.shadowColor = anim === 'neon-pulse' ? color : 'rgba(0, 0, 0, 0.85)';
+    ctx.shadowBlur = anim === 'neon-pulse' ? 28 : 16;
+    ctx.fillText(visibleText, 0, 0);
+  }
+
   ctx.restore();
 }
 
@@ -502,38 +606,85 @@ function applyVideoEffectPass(
 
   if (effectType === 'vhs-retro') {
     ctx.save();
-    ctx.fillStyle = `rgba(0, 0, 0, ${0.22 * strength})`;
-    for (let y = 0; y < h; y += 6) {
+    ctx.fillStyle = `rgba(0, 0, 0, ${0.28 * strength})`;
+    for (let y = 0; y < h; y += 5) {
       ctx.fillRect(0, y, w, 2);
     }
-    const barY = ((timeSec * 140) % h);
-    ctx.fillStyle = `rgba(255, 255, 255, ${0.12 * strength})`;
-    ctx.fillRect(0, barY, w, 14);
+    const barY = (timeSec * 165) % h;
+    ctx.fillStyle = `rgba(255, 255, 255, ${0.18 * strength})`;
+    ctx.fillRect(0, barY, w, 18);
+    ctx.fillStyle = `rgba(0, 202, 224, ${0.1 * strength})`;
+    ctx.fillRect(4 * strength, barY + 4, w, 5);
     ctx.restore();
   } else if (effectType === 'rgb-glitch') {
-    const shift = Math.sin(timeSec * 24) * 14 * strength;
+    const shift = Math.sin(timeSec * 28) * 20 * strength;
     ctx.save();
     ctx.globalCompositeOperation = 'screen';
-    ctx.fillStyle = `rgba(255, 0, 80, ${0.14 * strength})`;
+    ctx.fillStyle = `rgba(255, 20, 90, ${0.2 * strength})`;
     ctx.fillRect(shift, 0, w, h);
-    ctx.fillStyle = `rgba(0, 220, 255, ${0.14 * strength})`;
+    ctx.fillStyle = `rgba(0, 225, 255, ${0.2 * strength})`;
     ctx.fillRect(-shift, 0, w, h);
+    // Horizontal tear slices
+    for (let i = 0; i < 4; i++) {
+      const bandY = ((Math.sin(timeSec * 19 + i * 2.1) * 0.5 + 0.5) * h) % h;
+      const bandH = 12 + (i % 3) * 14;
+      ctx.fillStyle = i % 2 === 0 ? `rgba(0,225,255,${0.25 * strength})` : `rgba(244,63,94,${0.25 * strength})`;
+      ctx.fillRect(Math.sin(timeSec * 40 + i) * 45 * strength, bandY, w, bandH);
+    }
+    ctx.restore();
+  } else if (effectType === 'cyber-prism') {
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    const sweep = ((timeSec * 0.55) % 1.4) - 0.2;
+    const cx = w * sweep;
+    const grad = ctx.createLinearGradient(cx - w * 0.25, 0, cx + w * 0.25, h);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(0.35, `rgba(0, 202, 224, ${0.38 * strength})`);
+    grad.addColorStop(0.55, `rgba(167, 139, 250, ${0.42 * strength})`);
+    grad.addColorStop(0.75, `rgba(244, 114, 182, ${0.25 * strength})`);
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+    ctx.restore();
+  } else if (effectType === 'motion-blur-zoom') {
+    ctx.save();
+    ctx.strokeStyle = `rgba(255, 255, 255, ${0.24 * strength})`;
+    ctx.lineWidth = 3;
+    const pulse = (timeSec * 2.2) % 1;
+    for (let i = 0; i < 16; i++) {
+      const ang = (i / 16) * Math.PI * 2;
+      const r1 = w * (0.28 + pulse * 0.12);
+      const r2 = w * 0.65;
+      ctx.beginPath();
+      ctx.moveTo(w / 2 + Math.cos(ang) * r1, h / 2 + Math.sin(ang) * r1);
+      ctx.lineTo(w / 2 + Math.cos(ang) * r2, h / 2 + Math.sin(ang) * r2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  } else if (effectType === 'cinematic-teal') {
+    ctx.save();
+    const grad = ctx.createLinearGradient(0, 0, w, h);
+    grad.addColorStop(0, `rgba(13, 148, 136, ${0.32 * strength})`);
+    grad.addColorStop(1, `rgba(249, 115, 22, ${0.28 * strength})`);
+    ctx.globalCompositeOperation = 'soft-light';
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
     ctx.restore();
   } else if (effectType === 'neon-flash') {
-    const beat = Math.pow(Math.abs(Math.sin(timeSec * 8)), 6);
+    const beat = Math.pow(Math.abs(Math.sin(timeSec * 8)), 5);
     ctx.save();
-    ctx.fillStyle = `rgba(255, 255, 255, ${beat * 0.45 * strength})`;
+    ctx.fillStyle = `rgba(255, 255, 255, ${beat * 0.6 * strength})`;
     ctx.fillRect(0, 0, w, h);
     ctx.restore();
   } else if (effectType === 'vignette') {
-    const grad = ctx.createRadialGradient(w / 2, h / 2, w * 0.25, w / 2, h / 2, w * 0.72);
+    const grad = ctx.createRadialGradient(w / 2, h / 2, w * 0.22, w / 2, h / 2, w * 0.7);
     grad.addColorStop(0, 'rgba(0,0,0,0)');
-    grad.addColorStop(1, `rgba(0,0,0,${0.85 * strength})`);
+    grad.addColorStop(1, `rgba(0,0,0,${0.9 * strength})`);
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, w, h);
   } else if (effectType === 'warm-gold') {
     ctx.save();
-    ctx.fillStyle = `rgba(251, 191, 36, ${0.18 * strength})`;
+    ctx.fillStyle = `rgba(251, 191, 36, ${0.24 * strength})`;
     ctx.fillRect(0, 0, w, h);
     ctx.restore();
   } else if (effectType === 'bw-contrast') {
@@ -544,9 +695,11 @@ function applyVideoEffectPass(
     ctx.restore();
   } else if (effectType === 'edge-glow') {
     ctx.save();
-    ctx.strokeStyle = `rgba(0, 202, 224, ${0.55 * strength})`;
-    ctx.lineWidth = 10 * strength;
-    ctx.strokeRect(5, 5, w - 10, h - 10);
+    ctx.shadowColor = '#00CAE0';
+    ctx.shadowBlur = 28 * strength;
+    ctx.strokeStyle = `rgba(0, 202, 224, ${0.85 * strength})`;
+    ctx.lineWidth = 14 * strength;
+    ctx.strokeRect(7, 7, w - 14, h - 14);
     ctx.restore();
   }
 }
@@ -598,6 +751,8 @@ export function renderCompositeFrame(
         drawStockScene(offCtx, width, height, clip.stockVariant || 'cyber-grid', remappedTime);
       } else if (clip.sourceType === 'meme-clip') {
         drawMemeCard(offCtx, width, height, clip, localTime);
+      } else if (clip.sourceType === 'svg-sticker') {
+        drawSvgSticker(offCtx, width, height, clip, localTime);
       } else if (clip.sourceType === 'demo-text') {
         drawAnimatedText(offCtx, width, height, clip, localTime);
       } else if (clip.sourceType === 'local-video' || clip.sourceType === 'local-image') {
@@ -648,6 +803,7 @@ export function renderCompositeFrame(
       let flashWhite = 0;
       let fadeBlack = 0;
       let circleClipRadius: number | null = null;
+      let diamondClipRadius: number | null = null;
 
       if (clip.transitionIn && clip.transitionIn.type !== 'none') {
         const dur = Math.max(0.15, clip.transitionIn.durationSec);
@@ -657,41 +813,47 @@ export function renderCompositeFrame(
           if (tType === 'dissolve') {
             transAlpha = p;
           } else if (tType === 'zoom-in') {
-            transScale = 1.65 - p * 0.65;
-            transAlpha = p;
+            transScale = 2.05 - p * 1.05;
+            transAlpha = Math.min(1, p * 1.4);
           } else if (tType === 'zoom-out') {
-            transScale = 0.5 + p * 0.5;
-            transAlpha = p;
+            transScale = 0.42 + p * 0.58;
+            transAlpha = Math.min(1, p * 1.3);
           } else if (tType === 'slide-left') {
             transX = (1 - p) * width;
           } else if (tType === 'slide-up') {
             transY = (1 - p) * height;
           } else if (tType === 'spin-cut') {
-            transRot = (1 - p) * 180;
-            transScale = 0.6 + p * 0.4;
-            transAlpha = p;
+            transRot = (1 - p) * 220;
+            transScale = 0.52 + p * 0.48;
+            transAlpha = Math.min(1, p * 1.4);
           } else if (tType === 'circle-wipe') {
             circleClipRadius = p * Math.hypot(width / 2, height / 2);
+          } else if (tType === 'diamond-wipe') {
+            diamondClipRadius = p * (width + height) * 0.65;
           } else if (tType === 'flash-white') {
-            flashWhite = 1 - p;
+            flashWhite = Math.pow(1 - p, 0.75);
+            transScale = 1 + (1 - p) * 0.14;
           } else if (tType === 'fade-black') {
             fadeBlack = 1 - p;
           } else if (tType === 'glitch-cut') {
-            transX = Math.sin(localTime * 95) * 28 * (1 - p);
+            transX = Math.sin(localTime * 110) * 38 * (1 - p);
+            flashWhite = (1 - p) * 0.25;
           }
         }
       }
 
-      // Shake / Zoom-Pulse clip-level motion effects
+      // Shake / Zoom-Pulse / Hyper-Zoom clip-level motion effects
       let shakeX = 0;
       let shakeY = 0;
       let pulseScale = 1;
       if (clip.effect?.type === 'shake-impact') {
-        const s = (clip.effect.intensity / 100) * 18;
-        shakeX = Math.sin(localTime * 42) * s;
-        shakeY = Math.cos(localTime * 37) * s;
+        const s = (clip.effect.intensity / 100) * 22;
+        shakeX = Math.sin(localTime * 46) * s;
+        shakeY = Math.cos(localTime * 41) * s;
       } else if (clip.effect?.type === 'zoom-pulse') {
-        pulseScale = 1 + Math.abs(Math.sin(localTime * 6)) * 0.14 * (clip.effect.intensity / 100);
+        pulseScale = 1 + Math.abs(Math.sin(localTime * 6)) * 0.16 * (clip.effect.intensity / 100);
+      } else if (clip.effect?.type === 'motion-blur-zoom') {
+        pulseScale = 1 + ((localTime * 1.4) % 1) * 0.18 * (clip.effect.intensity / 100);
       }
 
       const cropLeft = ((clip.crop?.left ?? 0) / 100) * width;
@@ -715,6 +877,17 @@ export function renderCompositeFrame(
         ctx.clip();
       }
 
+      if (diamondClipRadius !== null) {
+        const r = Math.max(2, diamondClipRadius);
+        ctx.beginPath();
+        ctx.moveTo(0, -r);
+        ctx.lineTo(r, 0);
+        ctx.lineTo(0, r);
+        ctx.lineTo(-r, 0);
+        ctx.closePath();
+        ctx.clip();
+      }
+
       if (hasCrop) {
         const cw = Math.max(8, width - cropLeft - cropRight);
         const ch = Math.max(8, height - cropTop - cropBottom);
@@ -724,6 +897,28 @@ export function renderCompositeFrame(
       }
 
       ctx.drawImage(offscreen, -width / 2, -height / 2, width, height);
+
+      if (circleClipRadius !== null) {
+        ctx.strokeStyle = '#00CAE0';
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.arc(0, 0, Math.max(1, circleClipRadius), 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      if (diamondClipRadius !== null) {
+        const r = Math.max(2, diamondClipRadius);
+        ctx.strokeStyle = '#FBBF24';
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.moveTo(0, -r);
+        ctx.lineTo(r, 0);
+        ctx.lineTo(0, r);
+        ctx.lineTo(-r, 0);
+        ctx.closePath();
+        ctx.stroke();
+      }
+
       ctx.restore();
 
       if (flashWhite > 0.02) {

@@ -1,15 +1,18 @@
 import { useRef, useState } from 'react';
-import { ExternalLink, Globe, Music, Plus, Search, Upload, Volume2, X } from 'lucide-react';
+import { ExternalLink, Globe, Link2, Music, Plus, Search, Upload, Volume2, X } from 'lucide-react';
 import {
   MEME_LIBRARY,
   MemeLibraryItem,
   RESOURCE_WEBSITES,
 } from '../data/assetsCatalog';
 import { playMemeSfx } from '../engine/sfxEngine';
+import { SvgMemeIcon, SvgStickerIcon } from './StudioIcons';
 
 interface MemeLibrarySheetProps {
   onAddMeme: (item: MemeLibraryItem) => void;
   onImportFiles: (files: FileList, asOverlay?: boolean) => void;
+  onImportDirectUrl: (url: string) => void;
+  onOpenSvgStickers: () => void;
   onClose: () => void;
 }
 
@@ -26,10 +29,14 @@ const CATEGORIES = [
 export function MemeLibrarySheet({
   onAddMeme,
   onImportFiles,
+  onImportDirectUrl,
+  onOpenSvgStickers,
   onClose,
 }: MemeLibrarySheetProps) {
   const [category, setCategory] = useState<(typeof CATEGORIES)[number]>('All');
   const [query, setQuery] = useState('');
+  const [directUrl, setDirectUrl] = useState('');
+  const [urlError, setUrlError] = useState<string | null>(null);
   const audioInputRef = useRef<HTMLInputElement | null>(null);
   const videoInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -56,6 +63,18 @@ export function MemeLibrarySheet({
     );
   });
 
+  const handleApplyDirectUrl = () => {
+    const trimmed = directUrl.trim();
+    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+      setUrlError('Paste a direct http/https link to an .mp3, .mp4, .png, .gif, or .svg file.');
+      return;
+    }
+    setUrlError(null);
+    onImportDirectUrl(trimmed);
+    setDirectUrl('');
+    onClose();
+  };
+
   return (
     <div
       role="dialog"
@@ -80,7 +99,7 @@ export function MemeLibrarySheet({
       <input
         ref={videoInputRef}
         type="file"
-        accept="video/*,image/*"
+        accept="video/*,image/*,.svg"
         multiple
         className="hidden"
         onChange={(e) => {
@@ -101,13 +120,26 @@ export function MemeLibrarySheet({
         >
           <X className="w-5 h-5" />
         </button>
-        <h2 className="font-display text-sm font-semibold">
-          Memes, Sounds, Songs &amp; VFX Websites
-        </h2>
-        <div className="w-9" />
+        <div className="flex items-center gap-2">
+          <SvgMemeIcon className="w-5 h-5" />
+          <h2 className="font-display text-sm font-semibold">
+            Memes, Sound FX, SVGs &amp; Websites
+          </h2>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            onClose();
+            onOpenSvgStickers();
+          }}
+          className="px-2.5 py-1.5 rounded-lg bg-[#16161C] hover:bg-[#22222C] border border-[#2C2C38] text-[11px] font-semibold text-[#38BDF8] flex items-center gap-1.5 cursor-pointer"
+        >
+          <SvgStickerIcon className="w-3.5 h-3.5" />
+          <span>SVG Studio</span>
+        </button>
       </header>
 
-      {/* Search, Quick Import & Category Tabs */}
+      {/* Search, Direct URL Apply, Downloaded File Import & Category Tabs */}
       <div className="p-3 border-b border-[#1C1C22] space-y-2.5 shrink-0">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 max-w-5xl mx-auto">
           <div className="relative flex-1">
@@ -121,14 +153,14 @@ export function MemeLibrarySheet({
             />
           </div>
 
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1.5 overflow-x-auto shrink-0">
             <button
               type="button"
               onClick={() => audioInputRef.current?.click()}
               className="px-3 py-2 rounded-lg bg-[#00CAE0] hover:brightness-110 text-black text-xs font-bold flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
             >
               <Music className="w-3.5 h-3.5" />
-              <span>+ Import Downloaded Sound/Song</span>
+              <span>+ Apply Audio/MP3</span>
             </button>
             <button
               type="button"
@@ -136,10 +168,33 @@ export function MemeLibrarySheet({
               className="px-3 py-2 rounded-lg bg-[#1C1C24] hover:bg-[#262630] border border-[#2E2E3A] text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
             >
               <Upload className="w-3.5 h-3.5 text-[#A78BFA]" />
-              <span>+ Import Meme/VFX Clip</span>
+              <span>+ Apply Meme / Video / SVG</span>
             </button>
           </div>
         </div>
+
+        {/* Direct Paste URL -> Apply straight to Timeline */}
+        <div className="max-w-5xl mx-auto flex items-center gap-2">
+          <div className="relative flex-1">
+            <Link2 className="w-3.5 h-3.5 text-[#00CAE0] absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="url"
+              value={directUrl}
+              onChange={(e) => setDirectUrl(e.target.value)}
+              placeholder="Paste direct .mp3 / .mp4 / .gif / .png / .svg URL from website to apply directly..."
+              className="w-full pl-8 pr-3 py-1.5 bg-[#0C0C10] border border-[#24242E] focus:border-[#00CAE0] rounded-lg text-xs text-white outline-none"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={handleApplyDirectUrl}
+            className="px-3 py-1.5 rounded-lg bg-[#1E2E34] hover:bg-[#253C44] border border-[#00CAE0]/40 text-[#00CAE0] text-xs font-bold cursor-pointer whitespace-nowrap"
+          >
+            Direct Apply
+          </button>
+        </div>
+
+        {urlError && <p className="max-w-5xl mx-auto text-[11px] text-[#F87171]">{urlError}</p>}
 
         <div className="flex items-center gap-1.5 overflow-x-auto max-w-5xl mx-auto pb-0.5">
           {CATEGORIES.map((cat) => (
@@ -166,7 +221,7 @@ export function MemeLibrarySheet({
           <section className="max-w-5xl mx-auto space-y-2.5">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-[#8E8E98]">
-                Free Download Websites (Opens in Chrome · Then Import Above)
+                Free Download Websites (Download or Copy Link · Apply Directly Above)
               </h3>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5">

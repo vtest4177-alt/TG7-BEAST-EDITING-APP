@@ -179,10 +179,10 @@ export function PreviewStage({
   return (
     <section
       aria-label="CapCut video preview"
-      className="flex-1 min-h-[190px] flex flex-col bg-[#000000] overflow-hidden"
+      className="h-[38vh] min-h-[195px] max-h-[380px] shrink-0 flex flex-col bg-[#000000] overflow-hidden"
     >
       {/* Centered Black Preview Canvas */}
-      <div className="flex-1 min-h-0 px-4 pt-2 pb-1 flex items-center justify-center overflow-hidden">
+      <div className="flex-1 min-h-0 px-4 pt-1.5 pb-1 flex items-center justify-center overflow-hidden">
         <div
           className={`${aspectClass} relative bg-[#08080A] border border-[#1E1E24] overflow-hidden flex items-center justify-center`}
         >

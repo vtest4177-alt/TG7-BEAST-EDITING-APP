@@ -1,27 +1,5 @@
 import { useRef } from 'react';
-import {
-  ArrowLeftRight,
-  Check,
-  ChevronLeft,
-  Clapperboard,
-  Copy,
-  Crop,
-  Diamond,
-  ExternalLink,
-  Gauge,
-  Laugh,
-  Layers,
-  Move,
-  Music,
-  Ratio,
-  Scissors,
-  Sparkles,
-  Trash2,
-  Type,
-  Upload,
-  Volume2,
-  Wand2,
-} from 'lucide-react';
+import { Check, ChevronLeft, Copy, ExternalLink, Play, Trash2, Upload, Volume2 } from 'lucide-react';
 import {
   CLIP_TRANSITIONS,
   INTRO_OUTRO_TEMPLATES,
@@ -30,6 +8,7 @@ import {
   MemeLibraryItem,
   RESOURCE_WEBSITES,
   TEXT_ANIMATIONS,
+  TEXT_STYLE_PRESETS,
   VIDEO_EFFECTS,
 } from '../data/assetsCatalog';
 import { interpolateTransform } from '../engine/compositor';
@@ -43,11 +22,32 @@ import {
   SpeedPoint,
   SpeedPreset,
   TextAnimationType,
+  TextStylePreset,
   TransitionType,
   VideoEffectType,
 } from '../types/editor';
 import { FontManagerSheet } from './FontManagerSheet';
+import { EffectVisualThumb, TransitionVisualThumb } from './FxPreviewTile';
 import { SpeedCurveEditor } from './SpeedCurveEditor';
+import {
+  SvgAudioIcon,
+  SvgChromaIcon,
+  SvgCropIcon,
+  SvgEffectsIcon,
+  SvgFontIcon,
+  SvgIntroIcon,
+  SvgKeyframeIcon,
+  SvgLayerIcon,
+  SvgMediaIcon,
+  SvgMemeIcon,
+  SvgMotionIcon,
+  SvgRatioIcon,
+  SvgScissorsIcon,
+  SvgSpeedIcon,
+  SvgStickerIcon,
+  SvgTextIcon,
+  SvgTransitionIcon,
+} from './StudioIcons';
 
 export type BottomSheetTool =
   | null
@@ -71,9 +71,12 @@ interface CapCutBottomDockProps {
   activeSheet: BottomSheetTool;
   customFonts: string[];
   onChangeSheet: (sheet: BottomSheetTool) => void;
+  onOpenSmartFx: (sheet: 'effects' | 'transition') => void;
+  onPreviewSegment: (startSec: number) => void;
   onDeselectClip: () => void;
   onOpenMediaPicker: (mode: 'main' | 'overlay') => void;
   onOpenMemes: () => void;
+  onOpenSvgStickers: () => void;
   onImportAudio: (files: FileList) => void;
   onAddSfxItem: (item: MemeLibraryItem) => void;
   onAddTextClip: () => void;
@@ -87,6 +90,8 @@ interface CapCutBottomDockProps {
   onUpdateChromaKey: (patch: Partial<ChromaKeyConfig>) => void;
   onUpdateSpeedRamp: (preset: SpeedPreset, points: SpeedPoint[]) => void;
   onUpdateText: (textContent: string, textColor: string) => void;
+  onUpdateTextStyle: (style: TextStylePreset, fontSize?: number) => void;
+  onUpdateSvgColor: (accentHex: string) => void;
   onUpdateFont: (fontFamily: string) => void;
   onAddCustomFont: (fontFamily: string) => void;
   onUpdateTextAnimation: (anim: TextAnimationType) => void;
@@ -103,6 +108,8 @@ const CHROMA_SWATCHES = [
   { hex: '#000000', label: 'Black' },
 ];
 
+const TEXT_COLORS = ['#FFFFFF', '#00CAE0', '#FBBF24', '#34D399', '#F43F5E', '#A78BFA'];
+
 export function CapCutBottomDock({
   selectedClip,
   playheadSec,
@@ -110,9 +117,12 @@ export function CapCutBottomDock({
   activeSheet,
   customFonts,
   onChangeSheet,
+  onOpenSmartFx,
+  onPreviewSegment,
   onDeselectClip,
   onOpenMediaPicker,
   onOpenMemes,
+  onOpenSvgStickers,
   onImportAudio,
   onAddSfxItem,
   onAddTextClip,
@@ -126,6 +136,8 @@ export function CapCutBottomDock({
   onUpdateChromaKey,
   onUpdateSpeedRamp,
   onUpdateText,
+  onUpdateTextStyle,
+  onUpdateSvgColor,
   onUpdateFont,
   onAddCustomFont,
   onUpdateTextAnimation,
@@ -160,31 +172,54 @@ export function CapCutBottomDock({
       />
 
       {activeSheet && (
-        <div className="border-b border-[#24242C] bg-[#141418] px-4 py-3 max-h-[260px] overflow-y-auto">
-          <div className="max-w-2xl mx-auto space-y-3">
-            <div className="flex items-center justify-between">
+        <div className="border-b border-[#24242C] bg-[#141418] px-4 py-3 max-h-[290px] overflow-y-auto">
+          <div className="max-w-3xl mx-auto space-y-3">
+            <div className="flex items-center justify-between gap-2">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-[#A1A1AE]">
                 {activeSheet === 'audio-hub' && 'Sounds, Songs & Instant Websites'}
                 {activeSheet === 'speed' && 'Speed Curve'}
                 {activeSheet === 'chroma' && 'Chroma Key'}
                 {activeSheet === 'motion' && 'Motion & Transform'}
                 {activeSheet === 'crop' && 'Crop & Frame'}
-                {activeSheet === 'text' && 'Edit Text'}
-                {activeSheet === 'fonts' && 'Fonts & Chrome Downloader'}
+                {activeSheet === 'text' && 'Text Style & Color'}
+                {activeSheet === 'fonts' && 'Fonts, Google Fonts & DaFont .ZIP'}
                 {activeSheet === 'text-anim' && 'Text Animation'}
-                {activeSheet === 'effects' && 'Video Effects'}
-                {activeSheet === 'transition' && 'Cut Transition'}
+                {activeSheet === 'effects' && 'Live Video Effects'}
+                {activeSheet === 'transition' && 'Live Cut Transitions'}
                 {activeSheet === 'intro-outro' && 'Intro & Outro Templates'}
                 {activeSheet === 'ratio' && 'Canvas Ratio'}
               </h3>
-              <button
-                type="button"
-                onClick={() => onChangeSheet(null)}
-                aria-label="Apply and close panel"
-                className="w-8 h-8 rounded-full bg-[#24242C] hover:bg-[#32323D] text-white flex items-center justify-center cursor-pointer"
-              >
-                <Check className="w-4 h-4 text-[#00CAE0]" />
-              </button>
+
+              <div className="flex items-center gap-1.5">
+                {activeSheet === 'effects' && selectedClip && (
+                  <button
+                    type="button"
+                    onClick={() => onPreviewSegment(selectedClip.startSec)}
+                    className="px-2.5 py-1 rounded-md bg-[#00CAE0] text-black text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                  >
+                    <Play className="w-3 h-3 fill-black" />
+                    <span>Replay FX</span>
+                  </button>
+                )}
+                {activeSheet === 'transition' && selectedClip && (
+                  <button
+                    type="button"
+                    onClick={() => onPreviewSegment(Math.max(0, selectedClip.startSec - 0.15))}
+                    className="px-2.5 py-1 rounded-md bg-[#00CAE0] text-black text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                  >
+                    <Play className="w-3 h-3 fill-black" />
+                    <span>Replay Cut</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => onChangeSheet(null)}
+                  aria-label="Apply and close panel"
+                  className="w-8 h-8 rounded-full bg-[#24242C] hover:bg-[#32323D] text-white flex items-center justify-center cursor-pointer"
+                >
+                  <Check className="w-4 h-4 text-[#00CAE0]" />
+                </button>
+              </div>
             </div>
 
             {activeSheet === 'audio-hub' && (
@@ -245,29 +280,29 @@ export function CapCutBottomDock({
 
             {activeSheet === 'effects' && selectedClip && (
               <div className="space-y-3">
-                <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
                   {VIDEO_EFFECTS.map((fx) => {
                     const active = (selectedClip.effect?.type || 'none') === fx.id;
                     return (
                       <button
                         key={fx.id}
                         type="button"
-                        onClick={() =>
-                          onUpdateEffect(fx.id, selectedClip.effect?.intensity ?? 65)
-                        }
-                        className={`px-3 py-2 rounded-lg border text-left shrink-0 cursor-pointer ${
+                        onClick={() => {
+                          onUpdateEffect(fx.id, selectedClip.effect?.intensity ?? 70);
+                          onPreviewSegment(selectedClip.startSec);
+                        }}
+                        className={`p-1.5 rounded-xl border text-left transition-all cursor-pointer ${
                           active
-                            ? 'bg-[#00CAE0] border-[#00CAE0] text-black font-semibold'
-                            : 'bg-[#1C1C24] border-[#2C2C34] text-white'
+                            ? 'bg-[#0F2A30] border-[#00CAE0] ring-1 ring-[#00CAE0]'
+                            : 'bg-[#191921] border-[#2A2A34] hover:border-[#3A3A48]'
                         }`}
                       >
-                        <div className="text-xs whitespace-nowrap">{fx.label}</div>
-                        <div
-                          className={`text-[10px] whitespace-nowrap ${
-                            active ? 'text-black/75' : 'text-[#8E8E98]'
-                          }`}
-                        >
-                          {fx.desc}
+                        <EffectVisualThumb type={fx.id} />
+                        <div className="mt-1.5 px-0.5">
+                          <div className="text-[11px] font-semibold text-white truncate">
+                            {fx.label}
+                          </div>
+                          <div className="text-[9px] text-[#8E8E98] truncate">{fx.desc}</div>
                         </div>
                       </button>
                     );
@@ -281,7 +316,7 @@ export function CapCutBottomDock({
                     </div>
                     <input
                       type="range"
-                      min={10}
+                      min={15}
                       max={100}
                       value={selectedClip.effect.intensity}
                       onChange={(e) =>
@@ -299,36 +334,41 @@ export function CapCutBottomDock({
 
             {activeSheet === 'transition' && selectedClip && (
               <div className="space-y-3">
-                <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
                   {CLIP_TRANSITIONS.map((tr) => {
                     const active = (selectedClip.transitionIn?.type || 'none') === tr.id;
                     return (
                       <button
                         key={tr.id}
                         type="button"
-                        onClick={() =>
+                        onClick={() => {
                           onUpdateTransition(
                             tr.id,
-                            selectedClip.transitionIn?.durationSec ?? 0.5
-                          )
-                        }
-                        className={`px-3.5 py-2 rounded-lg border text-xs font-medium whitespace-nowrap shrink-0 cursor-pointer ${
+                            selectedClip.transitionIn?.durationSec ?? 0.45
+                          );
+                          onPreviewSegment(Math.max(0, selectedClip.startSec - 0.15));
+                        }}
+                        className={`p-1.5 rounded-xl border text-left transition-all cursor-pointer ${
                           active
-                            ? 'bg-[#00CAE0] border-[#00CAE0] text-black font-semibold'
-                            : 'bg-[#1C1C24] border-[#2C2C34] text-white'
+                            ? 'bg-[#0F2A30] border-[#00CAE0] ring-1 ring-[#00CAE0]'
+                            : 'bg-[#191921] border-[#2A2A34] hover:border-[#3A3A48]'
                         }`}
                       >
-                        {tr.label}
+                        <TransitionVisualThumb type={tr.id} />
+                        <div className="mt-1.5 px-0.5 text-[11px] font-semibold text-white truncate">
+                          {tr.label}
+                        </div>
                       </button>
                     );
                   })}
                 </div>
+
                 <div className="flex items-end gap-3">
                   <label className="flex-1 block space-y-1">
                     <div className="flex justify-between text-[11px] text-[#A1A1AE]">
                       <span>Transition Duration</span>
                       <span className="font-mono">
-                        {(selectedClip.transitionIn?.durationSec ?? 0.5).toFixed(2)}s
+                        {(selectedClip.transitionIn?.durationSec ?? 0.45).toFixed(2)}s
                       </span>
                     </div>
                     <input
@@ -336,7 +376,7 @@ export function CapCutBottomDock({
                       min={0.2}
                       max={1.5}
                       step={0.05}
-                      value={selectedClip.transitionIn?.durationSec ?? 0.5}
+                      value={selectedClip.transitionIn?.durationSec ?? 0.45}
                       onChange={(e) =>
                         onUpdateTransition(
                           selectedClip.transitionIn?.type ?? 'dissolve',
@@ -351,7 +391,7 @@ export function CapCutBottomDock({
                     onClick={() =>
                       onApplyTransitionToAll(
                         selectedClip.transitionIn?.type ?? 'dissolve',
-                        selectedClip.transitionIn?.durationSec ?? 0.5
+                        selectedClip.transitionIn?.durationSec ?? 0.45
                       )
                     }
                     className="px-3 py-1.5 rounded-lg bg-[#24242C] hover:bg-[#32323E] text-[11px] font-semibold text-[#00CAE0] whitespace-nowrap cursor-pointer"
@@ -401,7 +441,7 @@ export function CapCutBottomDock({
                         : 'bg-[#1C1C24] border-[#2C2C34] text-white'
                     }`}
                   >
-                    Fill & Crop
+                    Fill &amp; Crop
                   </button>
                   <button
                     type="button"
@@ -454,7 +494,10 @@ export function CapCutBottomDock({
                     <button
                       key={anim.id}
                       type="button"
-                      onClick={() => onUpdateTextAnimation(anim.id)}
+                      onClick={() => {
+                        onUpdateTextAnimation(anim.id);
+                        onPreviewSegment(selectedClip.startSec);
+                      }}
                       className={`px-3.5 py-2 rounded-lg border text-xs font-medium whitespace-nowrap shrink-0 cursor-pointer ${
                         active
                           ? 'bg-[#00CAE0] border-[#00CAE0] text-black font-semibold'
@@ -584,77 +627,96 @@ export function CapCutBottomDock({
             )}
 
             {activeSheet === 'motion' && selectedClip && (
-              <div className="grid grid-cols-2 gap-3">
-                <label className="space-y-1 block">
-                  <div className="flex justify-between text-[11px] text-[#A1A1AE]">
-                    <span>Scale</span>
-                    <span className="font-mono">{Math.round(currentTransform.scale * 100)}%</span>
+              <div className="space-y-3">
+                {selectedClip.sourceType === 'svg-sticker' && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-[#8E8E98]">SVG Color:</span>
+                    {TEXT_COLORS.map((hex) => (
+                      <button
+                        key={hex}
+                        type="button"
+                        onClick={() => onUpdateSvgColor(hex)}
+                        className={`w-6 h-6 rounded-full border cursor-pointer ${
+                          selectedClip.svgAccent === hex ? 'border-white scale-110' : 'border-white/20'
+                        }`}
+                        style={{ backgroundColor: hex }}
+                      />
+                    ))}
                   </div>
-                  <input
-                    type="range"
-                    min={0.2}
-                    max={2.5}
-                    step={0.02}
-                    value={currentTransform.scale}
-                    onChange={(e) => onUpdateTransform({ scale: parseFloat(e.target.value) })}
-                    className="w-full tg7-slider"
-                  />
-                </label>
+                )}
 
-                <label className="space-y-1 block">
-                  <div className="flex justify-between text-[11px] text-[#A1A1AE]">
-                    <span>Rotate</span>
-                    <span className="font-mono">{Math.round(currentTransform.rotation)}°</span>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="space-y-1 block">
+                    <div className="flex justify-between text-[11px] text-[#A1A1AE]">
+                      <span>Scale</span>
+                      <span className="font-mono">{Math.round(currentTransform.scale * 100)}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0.2}
+                      max={2.5}
+                      step={0.02}
+                      value={currentTransform.scale}
+                      onChange={(e) => onUpdateTransform({ scale: parseFloat(e.target.value) })}
+                      className="w-full tg7-slider"
+                    />
+                  </label>
+
+                  <label className="space-y-1 block">
+                    <div className="flex justify-between text-[11px] text-[#A1A1AE]">
+                      <span>Rotate</span>
+                      <span className="font-mono">{Math.round(currentTransform.rotation)}°</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={-180}
+                      max={180}
+                      step={1}
+                      value={currentTransform.rotation}
+                      onChange={(e) =>
+                        onUpdateTransform({ rotation: parseFloat(e.target.value) })
+                      }
+                      className="w-full tg7-slider"
+                    />
+                  </label>
+
+                  <label className="space-y-1 block">
+                    <div className="flex justify-between text-[11px] text-[#A1A1AE]">
+                      <span>Opacity</span>
+                      <span className="font-mono">
+                        {Math.round(currentTransform.opacity * 100)}%
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.02}
+                      value={currentTransform.opacity}
+                      onChange={(e) =>
+                        onUpdateTransform({ opacity: parseFloat(e.target.value) })
+                      }
+                      className="w-full tg7-slider"
+                    />
+                  </label>
+
+                  <div className="flex items-end">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onUpdateTransform({ x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 })
+                      }
+                      className="w-full py-1.5 bg-[#24242C] hover:bg-[#30303B] rounded text-xs text-white cursor-pointer"
+                    >
+                      Reset Position
+                    </button>
                   </div>
-                  <input
-                    type="range"
-                    min={-180}
-                    max={180}
-                    step={1}
-                    value={currentTransform.rotation}
-                    onChange={(e) =>
-                      onUpdateTransform({ rotation: parseFloat(e.target.value) })
-                    }
-                    className="w-full tg7-slider"
-                  />
-                </label>
-
-                <label className="space-y-1 block">
-                  <div className="flex justify-between text-[11px] text-[#A1A1AE]">
-                    <span>Opacity</span>
-                    <span className="font-mono">
-                      {Math.round(currentTransform.opacity * 100)}%
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={1}
-                    step={0.02}
-                    value={currentTransform.opacity}
-                    onChange={(e) =>
-                      onUpdateTransform({ opacity: parseFloat(e.target.value) })
-                    }
-                    className="w-full tg7-slider"
-                  />
-                </label>
-
-                <div className="flex items-end">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      onUpdateTransform({ x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 })
-                    }
-                    className="w-full py-1.5 bg-[#24242C] hover:bg-[#30303B] rounded text-xs text-white cursor-pointer"
-                  >
-                    Reset Position
-                  </button>
                 </div>
               </div>
             )}
 
             {activeSheet === 'text' && selectedClip && (
-              <div className="space-y-2.5">
+              <div className="space-y-3">
                 <div className="flex items-center gap-2">
                   <input
                     type="text"
@@ -671,23 +733,64 @@ export function CapCutBottomDock({
                     onChange={(e) =>
                       onUpdateText(selectedClip.textContent || '', e.target.value)
                     }
-                    className="w-10 h-9 rounded bg-transparent border border-[#2C2C34] cursor-pointer"
+                    className="w-9 h-9 rounded bg-transparent border border-[#2C2C34] cursor-pointer"
                   />
                 </div>
-                <div className="flex gap-2">
+
+                {/* Pro Text Style Presets */}
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+                  {TEXT_STYLE_PRESETS.map((st) => {
+                    const active = (selectedClip.textStyle || 'outline') === st.id;
+                    return (
+                      <button
+                        key={st.id}
+                        type="button"
+                        onClick={() => onUpdateTextStyle(st.id, selectedClip.fontSize)}
+                        className={`px-2 py-1.5 rounded-lg border text-center cursor-pointer ${
+                          active
+                            ? 'bg-[#00CAE0] border-[#00CAE0] text-black font-bold'
+                            : 'bg-[#1A1A22] border-[#2C2C36] text-white'
+                        }`}
+                      >
+                        <div className="text-[11px] truncate">{st.label}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="flex-1 min-w-[140px] flex items-center gap-2">
+                    <span className="text-[11px] text-[#A1A1AE]">Size</span>
+                    <input
+                      type="range"
+                      min={28}
+                      max={136}
+                      value={selectedClip.fontSize || 74}
+                      onChange={(e) =>
+                        onUpdateTextStyle(
+                          selectedClip.textStyle || 'outline',
+                          parseInt(e.target.value, 10)
+                        )
+                      }
+                      className="flex-1 tg7-slider"
+                    />
+                    <span className="text-[11px] font-mono w-8 text-right">
+                      {selectedClip.fontSize || 74}
+                    </span>
+                  </label>
                   <button
                     type="button"
                     onClick={() => onChangeSheet('fonts')}
                     className="px-3 py-1.5 rounded-lg bg-[#1C1C24] border border-[#2C2C36] text-xs text-[#00CAE0] cursor-pointer"
                   >
-                    Font: {selectedClip.fontFamily || 'Outfit'} (Download / Change)
+                    Font: {selectedClip.fontFamily || 'Outfit'}
                   </button>
                   <button
                     type="button"
                     onClick={() => onChangeSheet('text-anim')}
                     className="px-3 py-1.5 rounded-lg bg-[#1C1C24] border border-[#2C2C36] text-xs text-white cursor-pointer"
                   >
-                    Animation: {selectedClip.textAnimation || 'none'}
+                    Anim: {selectedClip.textAnimation || 'none'}
                   </button>
                 </div>
               </div>
@@ -721,17 +824,17 @@ export function CapCutBottomDock({
         </div>
       )}
 
-      {/* Main CapCut Bottom Tool Dock */}
+      {/* Main CapCut Bottom Tool Dock with Custom Crisp SVG Icons */}
       <div className="h-[64px] px-2 flex items-center gap-1 overflow-x-auto">
         {!selectedClip ? (
-          <div className="flex items-center justify-around w-full max-w-3xl mx-auto">
+          <div className="flex items-center justify-around w-full max-w-4xl mx-auto">
             <DockToolButton
-              icon={<Upload className="w-5 h-5 text-[#00CAE0]" />}
+              icon={<SvgMediaIcon />}
               label="Media"
               onClick={() => onOpenMediaPicker('main')}
             />
             <DockToolButton
-              icon={<Music className="w-5 h-5" />}
+              icon={<SvgAudioIcon />}
               label="Audio"
               active={activeSheet === 'audio-hub'}
               onClick={() =>
@@ -739,22 +842,37 @@ export function CapCutBottomDock({
               }
             />
             <DockToolButton
-              icon={<Type className="w-5 h-5" />}
+              icon={<SvgTextIcon />}
               label="Text"
               onClick={onAddTextClip}
             />
             <DockToolButton
-              icon={<Layers className="w-5 h-5 text-[#A78BFA]" />}
+              icon={<SvgStickerIcon />}
+              label="SVG"
+              onClick={onOpenSvgStickers}
+            />
+            <DockToolButton
+              icon={<SvgEffectsIcon />}
+              label="Effects"
+              onClick={() => onOpenSmartFx('effects')}
+            />
+            <DockToolButton
+              icon={<SvgTransitionIcon />}
+              label="Transition"
+              onClick={() => onOpenSmartFx('transition')}
+            />
+            <DockToolButton
+              icon={<SvgLayerIcon />}
               label="Overlay"
               onClick={() => onOpenMediaPicker('overlay')}
             />
             <DockToolButton
-              icon={<Laugh className="w-5 h-5 text-[#FBBF24]" />}
+              icon={<SvgMemeIcon />}
               label="Memes"
               onClick={onOpenMemes}
             />
             <DockToolButton
-              icon={<Clapperboard className="w-5 h-5 text-[#34D399]" />}
+              icon={<SvgIntroIcon />}
               label="Intro/Outro"
               active={activeSheet === 'intro-outro'}
               onClick={() =>
@@ -762,7 +880,7 @@ export function CapCutBottomDock({
               }
             />
             <DockToolButton
-              icon={<Ratio className="w-5 h-5" />}
+              icon={<SvgRatioIcon />}
               label="Ratio"
               active={activeSheet === 'ratio'}
               onClick={() => onChangeSheet(activeSheet === 'ratio' ? null : 'ratio')}
@@ -784,24 +902,24 @@ export function CapCutBottomDock({
 
             <div className="flex items-center gap-1 flex-1 justify-around overflow-x-auto">
               <DockToolButton
-                icon={<Scissors className="w-4 h-4" />}
+                icon={<SvgScissorsIcon />}
                 label="Split"
                 onClick={onSplit}
               />
               <DockToolButton
-                icon={<Gauge className="w-4 h-4" />}
+                icon={<SvgSpeedIcon />}
                 label="Speed"
                 active={activeSheet === 'speed'}
                 onClick={() => onChangeSheet(activeSheet === 'speed' ? null : 'speed')}
               />
               <DockToolButton
-                icon={<Wand2 className="w-4 h-4 text-[#A78BFA]" />}
+                icon={<SvgEffectsIcon className="w-4 h-4" />}
                 label="Effects"
                 active={activeSheet === 'effects'}
                 onClick={() => onChangeSheet(activeSheet === 'effects' ? null : 'effects')}
               />
               <DockToolButton
-                icon={<ArrowLeftRight className="w-4 h-4 text-[#00CAE0]" />}
+                icon={<SvgTransitionIcon className="w-4 h-4" />}
                 label="Transition"
                 active={activeSheet === 'transition'}
                 onClick={() =>
@@ -809,24 +927,24 @@ export function CapCutBottomDock({
                 }
               />
               <DockToolButton
-                icon={<Diamond className="w-4 h-4 text-[#FBBF24]" />}
+                icon={<SvgKeyframeIcon />}
                 label="Keyframe"
                 onClick={onToggleKeyframe}
               />
               <DockToolButton
-                icon={<Sparkles className="w-4 h-4 text-[#34D399]" />}
+                icon={<SvgChromaIcon />}
                 label="Chroma"
                 active={activeSheet === 'chroma'}
                 onClick={() => onChangeSheet(activeSheet === 'chroma' ? null : 'chroma')}
               />
               <DockToolButton
-                icon={<Crop className="w-4 h-4 text-[#38BDF8]" />}
+                icon={<SvgCropIcon />}
                 label="Crop"
                 active={activeSheet === 'crop'}
                 onClick={() => onChangeSheet(activeSheet === 'crop' ? null : 'crop')}
               />
               <DockToolButton
-                icon={<Move className="w-4 h-4" />}
+                icon={<SvgMotionIcon />}
                 label="Motion"
                 active={activeSheet === 'motion'}
                 onClick={() => onChangeSheet(activeSheet === 'motion' ? null : 'motion')}
@@ -834,20 +952,20 @@ export function CapCutBottomDock({
               {selectedClip.sourceType === 'demo-text' && (
                 <>
                   <DockToolButton
-                    icon={<Type className="w-4 h-4" />}
-                    label="Edit Text"
+                    icon={<SvgTextIcon className="w-4 h-4" />}
+                    label="Style/Text"
                     active={activeSheet === 'text'}
                     onClick={() => onChangeSheet(activeSheet === 'text' ? null : 'text')}
                   />
                   <DockToolButton
-                    icon={<Type className="w-4 h-4 text-[#00CAE0]" />}
+                    icon={<SvgFontIcon />}
                     label="Fonts"
                     active={activeSheet === 'fonts'}
                     onClick={() => onChangeSheet(activeSheet === 'fonts' ? null : 'fonts')}
                   />
                   <DockToolButton
-                    icon={<Sparkles className="w-4 h-4 text-[#FBBF24]" />}
-                    label="Animation"
+                    icon={<SvgEffectsIcon className="w-4 h-4" />}
+                    label="Text Anim"
                     active={activeSheet === 'text-anim'}
                     onClick={() =>
                       onChangeSheet(activeSheet === 'text-anim' ? null : 'text-anim')
@@ -856,7 +974,7 @@ export function CapCutBottomDock({
                 </>
               )}
               <DockToolButton
-                icon={<Copy className="w-4 h-4" />}
+                icon={<Copy className="w-4 h-4 text-[#A1A1AE]" />}
                 label="Copy"
                 onClick={onDuplicate}
               />

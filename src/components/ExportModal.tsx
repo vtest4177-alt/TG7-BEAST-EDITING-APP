@@ -15,6 +15,8 @@ export function ExportModal({ project, mediaElements, onClose }: ExportModalProp
   const [status, setStatus] = useState<'idle' | 'rendering' | 'done' | 'error'>('idle');
   const [progress, setProgress] = useState(0);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [exportedBlob, setExportedBlob] = useState<Blob | null>(null);
+  const [androidSaved, setAndroidSaved] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const cancelledRef = useRef(false);
 
@@ -36,6 +38,8 @@ export function ExportModal({ project, mediaElements, onClose }: ExportModalProp
     setStatus('rendering');
     setProgress(0);
     setErrorMsg(null);
+    setAndroidSaved(false);
+    setExportedBlob(null);
     if (downloadUrl) {
       URL.revokeObjectURL(downloadUrl);
       setDownloadUrl(null);
@@ -77,6 +81,7 @@ export function ExportModal({ project, mediaElements, onClose }: ExportModalProp
       if (cancelledRef.current) return;
       const blob = new Blob(chunks, { type: mimeType });
       const url = URL.createObjectURL(blob);
+      setExportedBlob(blob);
       setDownloadUrl(url);
       setProgress(100);
       setStatus('done');
@@ -203,14 +208,41 @@ export function ExportModal({ project, mediaElements, onClose }: ExportModalProp
           )}
 
           {status === 'done' && downloadUrl ? (
-            <a
-              href={downloadUrl}
-              download={`${project.name.toLowerCase().replace(/\s+/g, '-')}-tg7.webm`}
-              className="w-full min-h-[44px] bg-[#00CAE0] hover:brightness-110 text-black text-sm font-bold rounded-xl flex items-center justify-center gap-2"
-            >
-              <Download className="w-4 h-4" />
-              Download Video
-            </a>
+            (window as unknown as { TG7Android?: { saveVideo: (b64: string, name: string) => boolean } })
+              .TG7Android ? (
+              <button
+                type="button"
+                onClick={() => {
+                  if (!exportedBlob) return;
+                  const reader = new FileReader();
+                  reader.onloadend = () => {
+                    if (typeof reader.result === 'string') {
+                      const filename = `${project.name.toLowerCase().replace(/\s+/g, '-')}-tg7.webm`;
+                      const ok = (
+                        window as unknown as {
+                          TG7Android: { saveVideo: (b64: string, name: string) => boolean };
+                        }
+                      ).TG7Android.saveVideo(reader.result, filename);
+                      if (ok) setAndroidSaved(true);
+                    }
+                  };
+                  reader.readAsDataURL(exportedBlob);
+                }}
+                className="w-full min-h-[44px] bg-[#00CAE0] hover:brightness-110 text-black text-sm font-bold rounded-xl flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+                <span>{androidSaved ? 'Saved to Downloads/TG7 Editor' : 'Save Video to Phone'}</span>
+              </button>
+            ) : (
+              <a
+                href={downloadUrl}
+                download={`${project.name.toLowerCase().replace(/\s+/g, '-')}-tg7.webm`}
+                className="w-full min-h-[44px] bg-[#00CAE0] hover:brightness-110 text-black text-sm font-bold rounded-xl flex items-center justify-center gap-2"
+              >
+                <Download className="w-4 h-4" />
+                Download Video
+              </a>
+            )
           ) : (
             <button
               type="button"

@@ -1,4 +1,9 @@
-import { TextAnimationType, TransitionType, VideoEffectType } from '../types/editor';
+import {
+  TextAnimationType,
+  TextStylePreset,
+  TransitionType,
+  VideoEffectType,
+} from '../types/editor';
 
 export interface FontCatalogItem {
   name: string;
@@ -16,9 +21,21 @@ export const GOOGLE_FONT_CATALOG: FontCatalogItem[] = [
   { name: 'Audiowide', category: 'Gaming', googleFamily: 'Audiowide', previewText: 'CYBER RUN' },
   { name: 'Rubik Glitch', category: 'Gaming', googleFamily: 'Rubik+Glitch', previewText: 'GLITCH FX' },
   { name: 'Permanent Marker', category: 'Meme', googleFamily: 'Permanent+Marker', previewText: 'BRUH MOMENT' },
-  { name: 'Cinzel', category: 'Cinematic', googleFamily: 'Cinzel:wght@700', previewText: 'CHAPTER ONE' },
+  { name: 'Russo One', category: 'Gaming', googleFamily: 'Russo+One', previewText: 'PRO LEAGUE' },
+  { name: 'Chakra Petch', category: 'Gaming', googleFamily: 'Chakra+Petch:wght@700', previewText: 'HUD SYSTEM' },
+  { name: 'Bungee', category: 'Meme', googleFamily: 'Bungee', previewText: 'POP STAMP' },
+  { name: 'Syne', category: 'Modern', googleFamily: 'Syne:wght@800', previewText: 'AESTHETIC' },
+  { name: 'Montserrat', category: 'Modern', googleFamily: 'Montserrat:wght@800;900', previewText: 'BOLD REEL' },
+  { name: 'Poppins', category: 'Modern', googleFamily: 'Poppins:wght@700;900', previewText: 'CLEAN CAP' },
+  { name: 'Archivo Black', category: 'Cinematic', googleFamily: 'Archivo+Black', previewText: 'HEADLINE' },
+  { name: 'Teko', category: 'Cinematic', googleFamily: 'Teko:wght@700', previewText: 'TRAILER' },
+  { name: 'Exo 2', category: 'Gaming', googleFamily: 'Exo+2:wght@800', previewText: 'HYPERION' },
+  { name: 'Silkscreen', category: 'Gaming', googleFamily: 'Silkscreen:wght@700', previewText: 'PIXEL 8BIT' },
+  { name: 'Cinzel', category: 'Cinematic', googleFamily: 'Cinzel:wght@700', previewText: 'CHAPTER I' },
   { name: 'Oswald', category: 'Modern', googleFamily: 'Oswald:wght@600;700', previewText: 'MONTAGE' },
   { name: 'Righteous', category: 'Modern', googleFamily: 'Righteous', previewText: 'VELOCITY' },
+  { name: 'Pacifico', category: 'Meme', googleFamily: 'Pacifico', previewText: 'Vibe Check' },
+  { name: 'Lobster', category: 'Meme', googleFamily: 'Lobster', previewText: 'Smooth Cut' },
   { name: 'Press Start 2P', category: 'Gaming', googleFamily: 'Press+Start+2P', previewText: 'LEVEL UP' },
 ];
 
@@ -42,7 +59,52 @@ export async function loadGoogleFont(item: FontCatalogItem): Promise<void> {
   }
 }
 
+export async function installGoogleFontByInput(input: string): Promise<string> {
+  const trimmed = input.trim();
+  if (!trimmed) throw new Error('Enter a Google Font name or link.');
+
+  let cssHref = '';
+  let familyName = trimmed;
+
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    cssHref = trimmed;
+    const match = trimmed.match(/family=([^:&]+)/);
+    familyName = match ? decodeURIComponent(match[1]).replace(/\+/g, ' ') : 'CustomWebFont';
+  } else {
+    const encoded = trimmed.replace(/\s+/g, '+');
+    cssHref = `https://fonts.googleapis.com/css2?family=${encoded}:wght@400;700;900&display=swap`;
+  }
+
+  const linkId = `gf-custom-${familyName.replace(/\s+/g, '-').toLowerCase()}`;
+  if (!document.getElementById(linkId)) {
+    const link = document.createElement('link');
+    link.id = linkId;
+    link.rel = 'stylesheet';
+    link.href = cssHref;
+    document.head.appendChild(link);
+  }
+
+  try {
+    await document.fonts.load(`700 40px "${familyName}"`);
+  } catch {
+    // Allow fallback even if weight 700 isn't present
+    await document.fonts.load(`400 40px "${familyName}"`).catch(() => undefined);
+  }
+  loadedFontSet.add(familyName);
+  return familyName;
+}
+
 export async function installLocalFontFile(file: File): Promise<string> {
+  if (/\.zip$/i.test(file.name)) {
+    const { extractFontFromZip } = await import('../engine/zipFontExtractor');
+    const extracted = await extractFontFromZip(file);
+    const fontFace = new FontFace(extracted.name, extracted.buffer);
+    const loaded = await fontFace.load();
+    document.fonts.add(loaded);
+    loadedFontSet.add(extracted.name);
+    return extracted.name;
+  }
+
   const cleanName = file.name.replace(/\.(ttf|otf|woff2?|TTF|OTF|WOFF2?)$/, '');
   const buffer = await file.arrayBuffer();
   const fontFace = new FontFace(cleanName, buffer);
@@ -52,37 +114,54 @@ export async function installLocalFontFile(file: File): Promise<string> {
   return cleanName;
 }
 
+export const TEXT_STYLE_PRESETS: {
+  id: TextStylePreset;
+  label: string;
+  desc: string;
+}[] = [
+  { id: 'outline', label: 'Bold Stroke', desc: 'Viral thick outline' },
+  { id: 'neon-glow', label: 'Neon Bloom', desc: 'Glowing aura' },
+  { id: 'cyber-box', label: 'Caption Card', desc: 'Crisp HUD bar' },
+  { id: 'gradient-fire', label: 'Gradient', desc: 'Cyan / Gold fill' },
+  { id: '3d-pop', label: '3D Extrude', desc: 'Depth block pop' },
+  { id: 'clean', label: 'Clean Shadow', desc: 'Minimal soft drop' },
+];
+
 export const VIDEO_EFFECTS: { id: VideoEffectType; label: string; desc: string }[] = [
   { id: 'none', label: 'Original', desc: 'No effect' },
-  { id: 'rgb-glitch', label: 'RGB Glitch', desc: 'Chromatic split' },
-  { id: 'vhs-retro', label: 'VHS Retro', desc: 'Scanlines & tape' },
+  { id: 'rgb-glitch', label: 'RGB Glitch', desc: 'Chromatic tear' },
+  { id: 'cyber-prism', label: 'Prism Sweep', desc: 'Neon light leak' },
+  { id: 'motion-blur-zoom', label: 'Hyper Zoom', desc: 'Radial speed punch' },
+  { id: 'shake-impact', label: 'Shake Cam', desc: 'Bass impact shake' },
+  { id: 'vhs-retro', label: 'VHS Tape', desc: 'CRT tracking wave' },
   { id: 'neon-flash', label: 'Beat Flash', desc: 'Strobe exposure' },
-  { id: 'shake-impact', label: 'Shake Cam', desc: 'Camera impact' },
-  { id: 'zoom-pulse', label: 'Beat Zoom', desc: 'Rhythm pulse' },
-  { id: 'edge-glow', label: 'Edge Glow', desc: 'High contrast pop' },
-  { id: 'vignette', label: 'Dark Vignette', desc: 'Cinematic frame' },
+  { id: 'zoom-pulse', label: 'Beat Pulse', desc: 'Rhythm bounce' },
+  { id: 'edge-glow', label: 'Neon Border', desc: 'Cyan frame glow' },
+  { id: 'cinematic-teal', label: 'Teal & Gold', desc: 'Hollywood LUT' },
+  { id: 'vignette', label: 'Cinema Vignette', desc: 'Dark focus edge' },
   { id: 'bw-contrast', label: 'Noir B&W', desc: 'High contrast mono' },
   { id: 'warm-gold', label: 'Golden Hour', desc: 'Warm film tone' },
 ];
 
 export const CLIP_TRANSITIONS: { id: TransitionType; label: string }[] = [
   { id: 'none', label: 'None' },
-  { id: 'dissolve', label: 'Mix Dissolve' },
   { id: 'flash-white', label: 'White Flash' },
-  { id: 'fade-black', label: 'Black Fade' },
+  { id: 'glitch-cut', label: 'Glitch Cut' },
+  { id: 'spin-cut', label: 'Whip Spin' },
   { id: 'zoom-in', label: 'Zoom Pull' },
   { id: 'zoom-out', label: 'Zoom Out' },
-  { id: 'slide-left', label: 'Slide Left' },
-  { id: 'slide-up', label: 'Slide Up' },
-  { id: 'spin-cut', label: 'Whip Spin' },
-  { id: 'circle-wipe', label: 'Circle Wipe' },
-  { id: 'glitch-cut', label: 'Glitch Cut' },
+  { id: 'slide-left', label: 'Whip Left' },
+  { id: 'slide-up', label: 'Swipe Up' },
+  { id: 'circle-wipe', label: 'Iris Portal' },
+  { id: 'diamond-wipe', label: 'Diamond Cut' },
+  { id: 'dissolve', label: 'Mix Dissolve' },
+  { id: 'fade-black', label: 'Black Fade' },
 ];
 
 export const TEXT_ANIMATIONS: { id: TextAnimationType; label: string }[] = [
   { id: 'none', label: 'Static' },
-  { id: 'typewriter', label: 'Typewriter' },
   { id: 'pop-bounce', label: 'Pop Bounce' },
+  { id: 'typewriter', label: 'Typewriter' },
   { id: 'slide-up', label: 'Slide Up' },
   { id: 'glitch-flicker', label: 'Glitch' },
   { id: 'neon-pulse', label: 'Glow Pulse' },
@@ -245,7 +324,7 @@ export interface ResourceWebsiteItem {
   id: string;
   name: string;
   tagline: string;
-  category: 'Meme Sounds' | 'Songs & Beats' | 'Meme VFX & Video' | 'Fonts';
+  category: 'Meme Sounds' | 'Songs & Beats' | 'Meme VFX & Video' | 'Fonts' | 'SVG & Stickers';
   url: string;
   accentHex: string;
 }
@@ -345,30 +424,55 @@ export const RESOURCE_WEBSITES: ResourceWebsiteItem[] = [
     accentHex: '#FBBF24',
   },
 
+  // SVG & Vector Sticker Websites
+  {
+    id: 'site-svgrepo',
+    name: 'SVG Repo',
+    tagline: '500k+ free SVG vectors, badges & HUD icons',
+    category: 'SVG & Stickers',
+    url: 'https://www.svgrepo.com/',
+    accentHex: '#00CAE0',
+  },
+  {
+    id: 'site-iconify',
+    name: 'Iconify Vector Hub',
+    tagline: 'Copy SVG code or download crisp icons',
+    category: 'SVG & Stickers',
+    url: 'https://icon-sets.iconify.design/',
+    accentHex: '#38BDF8',
+  },
+  {
+    id: 'site-flaticon',
+    name: 'Flaticon Stickers',
+    tagline: 'Vector gaming badges & creator stickers',
+    category: 'SVG & Stickers',
+    url: 'https://www.flaticon.com/stickers',
+    accentHex: '#34D399',
+  },
+
   // Font Websites
   {
     id: 'site-google-fonts',
     name: 'Google Fonts',
-    tagline: 'Clean modern, display & gaming fonts',
+    tagline: 'Instant web fonts — paste name or link in app',
     category: 'Fonts',
     url: 'https://fonts.google.com/',
     accentHex: '#00CAE0',
   },
   {
     id: 'site-dafont',
-    name: 'DaFont',
-    tagline: 'Esports, brush, glitch & meme TTF fonts',
+    name: 'DaFont (.ZIP Ready)',
+    tagline: 'Esports, brush & meme fonts — import .ZIP directly',
     category: 'Fonts',
     url: 'https://www.dafont.com/',
     accentHex: '#F59E0B',
   },
   {
     id: 'site-1001fonts',
-    name: '1001 Fonts',
-    tagline: 'Free custom TTF/OTF fonts for titles',
+    name: '1001 Fonts (.ZIP Ready)',
+    tagline: 'Free custom TTF/OTF/ZIP fonts for titles',
     category: 'Fonts',
     url: 'https://www.1001fonts.com/',
     accentHex: '#A78BFA',
   },
 ];
-

@@ -11,6 +11,7 @@ export type ClipSourceType =
   | 'stock-clip'
   | 'meme-clip'
   | 'meme-sfx'
+  | 'svg-sticker'
   | 'local-video'
   | 'local-image'
   | 'local-audio';
@@ -25,10 +26,13 @@ export type SpeedPreset =
 export type VideoEffectType =
   | 'none'
   | 'rgb-glitch'
+  | 'cyber-prism'
   | 'vhs-retro'
+  | 'motion-blur-zoom'
   | 'neon-flash'
   | 'shake-impact'
   | 'vignette'
+  | 'cinematic-teal'
   | 'bw-contrast'
   | 'warm-gold'
   | 'edge-glow'
@@ -45,6 +49,7 @@ export type TransitionType =
   | 'slide-up'
   | 'spin-cut'
   | 'circle-wipe'
+  | 'diamond-wipe'
   | 'glitch-cut';
 
 export type TextAnimationType =
@@ -55,6 +60,14 @@ export type TextAnimationType =
   | 'glitch-flicker'
   | 'neon-pulse'
   | 'zoom-reveal';
+
+export type TextStylePreset =
+  | 'clean'
+  | 'outline'
+  | 'neon-glow'
+  | 'cyber-box'
+  | 'gradient-fire'
+  | '3d-pop';
 
 export type WorkspaceView = 'projects' | 'studio' | 'apk-build';
 
@@ -109,7 +122,11 @@ export interface Clip {
   textContent?: string;
   textColor?: string;
   fontFamily?: string;
+  fontSize?: number;
+  textStyle?: TextStylePreset;
   textAnimation?: TextAnimationType;
+  svgMarkup?: string;
+  svgAccent?: string;
   effect?: {
     type: VideoEffectType;
     intensity: number; // 0 to 100
