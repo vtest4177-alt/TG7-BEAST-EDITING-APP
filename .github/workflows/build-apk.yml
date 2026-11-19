@@ -20,7 +20,7 @@ jobs:
 
       - name: Build TG7 Editor Web Studio Bundle
         run: |
-          if [ -f package-lock.json ]; then npm ci; else npm install --no-audit --no-fund; fi
+          if [ -f package-lock.json ]; then npm ci --legacy-peer-deps || npm install --legacy-peer-deps --no-audit --no-fund; else npm install --legacy-peer-deps --no-audit --no-fund; fi
           npm run build
           rm -rf android-app/app/src/main/assets
           mkdir -p android-app/app/src/main/assets
@@ -34,7 +34,8 @@ jobs:
 
       - name: Ensure Android 16 (API 36) SDK Platform & Build-Tools
         run: |
-          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
           if [ -x "$SDKMANAGER" ]; then
             yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
             "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
