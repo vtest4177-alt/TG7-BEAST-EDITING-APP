@@ -73,21 +73,31 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import com.airbnb.lottie.compose.LottieAnimation
+import com.airbnb.lottie.compose.LottieCompositionSpec
+import com.airbnb.lottie.compose.rememberLottieComposition
+import com.tg7.editor.engine.anim.OverlayAnimator
 import com.tg7.editor.engine.player.StudioPlayerController
 import com.tg7.editor.media.MediaPickerHelper
 import com.tg7.editor.model.EditorProject
@@ -98,6 +108,7 @@ import com.tg7.editor.model.TimelineSelection
 import com.tg7.editor.model.TrackType
 import com.tg7.editor.ui.components.MultiTrackTimeline
 import com.tg7.editor.ui.components.TG7DockToolButton
+import com.tg7.editor.ui.components.resolveComposeFontFamily
 import com.tg7.editor.ui.theme.TG7Colors
 import kotlin.math.roundToInt
 
@@ -598,11 +609,18 @@ private fun AspectPreviewStage(
                 modifier = Modifier.fillMaxSize()
             )
 
-            // Live Text Overlays (draggable on preview stage)
+            val stageContext = LocalContext.current
+
+            // Live Text Overlays (draggable + Phase 4 typography & 60 animations)
             project.textLayers.filter {
                 globalPositionMs in it.startTimeMs..(it.startTimeMs + it.durationMs)
             }.forEach { layer ->
                 val isSelected = selection?.itemId == layer.id
+                val animFrame = OverlayAnimator.evaluateText(
+                    context = stageContext,
+                    layer = layer,
+                    localTimeMs = (globalPositionMs - layer.startTimeMs).coerceAtLeast(0L)
+                )
                 Box(
                     modifier = Modifier
                         .offset {
@@ -612,10 +630,20 @@ private fun AspectPreviewStage(
                             )
                         }
                         .align(Alignment.Center)
+                        .graphicsLayer {
+                            alpha = animFrame.alpha
+                            scaleX = animFrame.scaleX
+                            scaleY = animFrame.scaleY
+                            translationX = animFrame.offsetXDp.dp.toPx()
+                            translationY = animFrame.offsetYDp.dp.toPx()
+                            rotationZ = animFrame.rotationDeg
+                        }
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (layer.bgColorHex != 0L) Color(layer.bgColorHex) else Color.Transparent)
                         .border(
                             width = if (isSelected) 1.5.dp else 0.dp,
                             color = if (isSelected) TG7Colors.NeonCyan else Color.Transparent,
-                            shape = RoundedCornerShape(8.dp)
+                            shape = RoundedCornerShape(10.dp)
                         )
                         .pointerInput(layer.id, stageWidthPx, stageHeightPx) {
                             var curX = layer.posXFraction
@@ -633,22 +661,30 @@ private fun AspectPreviewStage(
                                 }
                             )
                         }
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
                 ) {
                     Text(
-                        text = layer.text,
-                        color = Color(layer.colorHex),
-                        fontSize = layer.fontSizeSp.sp,
-                        fontWeight = FontWeight.Black
+                        text = animFrame.visibleText,
+                        style = TextStyle(
+                            color = Color(animFrame.overrideColorHex ?: layer.colorHex),
+                            fontSize = layer.fontSizeSp.sp,
+                            fontFamily = resolveComposeFontFamily(layer.fontFamily),
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = layer.letterSpacingEm.em,
+                            shadow = if (layer.hasOutline) {
+                                Shadow(color = Color.Black, offset = Offset(0f, 2f), blurRadius = 6f)
+                            } else null
+                        )
                     )
                 }
             }
 
-            // Live Sticker Overlays (draggable on preview stage)
+            // Live Sticker Overlays (Lottie animated vector + Material icon fallback)
             project.stickerLayers.filter {
                 globalPositionMs in it.startTimeMs..(it.startTimeMs + it.durationMs)
             }.forEach { sticker ->
                 val isSelected = selection?.itemId == sticker.id
+                val lottiePath = sticker.lottieAssetPath
                 Box(
                     modifier = Modifier
                         .offset {
@@ -660,10 +696,10 @@ private fun AspectPreviewStage(
                         .align(Alignment.Center)
                         .size(sticker.sizeDp.dp)
                         .clip(CircleShape)
-                        .background(Color(0x990A0E17))
+                        .background(if (lottiePath != null) Color.Transparent else Color(0x990A0E17))
                         .border(
-                            width = if (isSelected) 2.dp else 1.5.dp,
-                            color = if (isSelected) TG7Colors.NeonCyan else Color(sticker.tintHex),
+                            width = if (isSelected) 2.dp else if (lottiePath == null) 1.5.dp else 0.dp,
+                            color = if (isSelected) TG7Colors.NeonCyan else if (lottiePath == null) Color(sticker.tintHex) else Color.Transparent,
                             shape = CircleShape
                         )
                         .pointerInput(sticker.id, stageWidthPx, stageHeightPx) {
@@ -684,12 +720,23 @@ private fun AspectPreviewStage(
                         },
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = sticker.preset.icon,
-                        contentDescription = sticker.preset.label,
-                        tint = Color(sticker.tintHex),
-                        modifier = Modifier.size((sticker.sizeDp * 0.58f).dp)
-                    )
+                    if (lottiePath != null) {
+                        val comp by rememberLottieComposition(LottieCompositionSpec.Asset(lottiePath))
+                        val localMs = (globalPositionMs - sticker.startTimeMs).coerceAtLeast(0L)
+                        val progress = ((localMs % 1500L) / 1500f)
+                        LottieAnimation(
+                            composition = comp,
+                            progress = { progress },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Icon(
+                            imageVector = sticker.preset.icon,
+                            contentDescription = sticker.preset.label,
+                            tint = Color(sticker.tintHex),
+                            modifier = Modifier.size((sticker.sizeDp * 0.58f).dp)
+                        )
+                    }
                 }
             }
         }

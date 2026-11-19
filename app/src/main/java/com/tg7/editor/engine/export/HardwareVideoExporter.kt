@@ -6,6 +6,8 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.PorterDuff
+import android.graphics.RectF
 import android.graphics.Typeface
 import android.media.MediaScannerConnection
 import android.net.Uri
@@ -15,6 +17,8 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
 import androidx.core.content.FileProvider
+import com.airbnb.lottie.LottieCompositionFactory
+import com.airbnb.lottie.LottieDrawable
 import androidx.media3.common.Effect
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
@@ -32,12 +36,14 @@ import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.ProgressHolder
 import androidx.media3.transformer.Transformer
 import com.google.common.collect.ImmutableList
+import com.tg7.editor.engine.anim.OverlayAnimator
 import com.tg7.editor.engine.gl.TransitionTimelineEffect
 import com.tg7.editor.model.EditorProject
 import com.tg7.editor.model.ExportResolution
 import com.tg7.editor.model.ExportState
 import com.tg7.editor.model.MediaKind
 import com.tg7.editor.model.StickerLayer
+import com.tg7.editor.model.TextFontFamily
 import com.tg7.editor.model.TextLayer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -217,38 +223,131 @@ class HardwareVideoExporter(context: Context) {
         }
     }
 
+    private fun resolveTypeface(family: TextFontFamily): Typeface {
+        return when (family) {
+            TextFontFamily.DISPLAY -> Typeface.create("sans-serif-black", Typeface.BOLD)
+            TextFontFamily.SANS -> Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+            TextFontFamily.SERIF -> Typeface.create(Typeface.SERIF, Typeface.BOLD)
+            TextFontFamily.MONO -> Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+            TextFontFamily.CONDENSED -> Typeface.create("sans-serif-condensed", Typeface.BOLD)
+            TextFontFamily.ROUNDED -> Typeface.create("sans-serif", Typeface.BOLD)
+        }
+    }
+
     private fun createTimedTextOverlay(layer: TextLayer, targetHeight: Int): BitmapOverlay {
         val textPx = (layer.fontSizeSp * (targetHeight / 720f) * 2.1f).coerceIn(28f, 160f)
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        val tf = resolveTypeface(layer.fontFamily)
+        val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = layer.colorHex.toInt()
             textSize = textPx
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            typeface = tf
+            letterSpacing = layer.letterSpacingEm
             setShadowLayer(8f, 0f, 3f, Color.BLACK)
         }
-        val strokePaint = Paint(paint).apply {
+        val strokePaint = Paint(fillPaint).apply {
             style = Paint.Style.STROKE
             strokeWidth = 6f
             color = Color.BLACK
         }
+        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.FILL
+            color = layer.bgColorHex.toInt()
+        }
 
-        val text = layer.text.ifBlank { "TG7" }
-        val textW = paint.measureText(text).toInt().coerceAtLeast(32)
-        val fm = paint.fontMetrics
-        val textH = (fm.descent - fm.ascent).toInt().coerceAtLeast(32)
+        val fullText = layer.text.ifBlank { "TG7" }
+        val measureText = "$fullText.."
+        val boxW = (fillPaint.measureText(measureText).toInt() + 72).coerceAtLeast(120)
+        val fm = fillPaint.fontMetrics
+        val textH = (fm.descent - fm.ascent).toInt().coerceAtLeast(36)
+        val boxH = textH + 56
 
-        val pad = 28
-        val bmp = Bitmap.createBitmap(textW + pad * 2, textH + pad * 2, Bitmap.Config.ARGB_8888)
-        allocatedOverlayBitmaps.add(bmp)
-        val canvas = Canvas(bmp)
-        val baseline = pad - fm.ascent
-        canvas.drawText(text, pad.toFloat(), baseline, strokePaint)
-        canvas.drawText(text, pad.toFloat(), baseline, paint)
+        val bmpA = Bitmap.createBitmap(boxW, boxH, Bitmap.Config.ARGB_8888)
+        val bmpB = Bitmap.createBitmap(boxW, boxH, Bitmap.Config.ARGB_8888)
+        allocatedOverlayBitmaps.add(bmpA)
+        allocatedOverlayBitmaps.add(bmpB)
+        val canvasA = Canvas(bmpA)
+        val canvasB = Canvas(bmpB)
+
+        fun renderTextInto(canvas: Canvas, textToDraw: String, textColorInt: Int) {
+            canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
+            fillPaint.color = textColorInt
+            val curW = fillPaint.measureText(textToDraw)
+            val leftX = (boxW - curW) / 2f
+            val baseline = (boxH - (fm.descent + fm.ascent)) / 2f
+            if (((layer.bgColorHex ushr 24) and 0xFF) > 0L) {
+                val rect = RectF(
+                    (leftX - 24f).coerceAtLeast(4f),
+                    8f,
+                    (leftX + curW + 24f).coerceAtMost(boxW - 4f),
+                    (boxH - 8f)
+                )
+                canvas.drawRoundRect(rect, 22f, 22f, bgPaint)
+            }
+            if (layer.hasOutline) {
+                canvas.drawText(textToDraw, leftX, baseline, strokePaint)
+            }
+            canvas.drawText(textToDraw, leftX, baseline, fillPaint)
+        }
+
+        renderTextInto(canvasA, fullText, layer.colorHex.toInt())
 
         val startUs = layer.startTimeMs * 1000L
         val endUs = (layer.startTimeMs + layer.durationMs) * 1000L
         val ndcX = (layer.posXFraction * 2f - 1f).coerceIn(-0.92f, 0.92f)
         val ndcY = (1f - layer.posYFraction * 2f).coerceIn(-0.92f, 0.92f)
+        val hiddenSettings = OverlaySettings.Builder().setAlphaScale(0f).build()
+        val isStatic = layer.animationId == "ta_none"
 
+        return object : BitmapOverlay() {
+            private var useB = false
+
+            override fun getBitmap(presentationTimeUs: Long): Bitmap {
+                if (isStatic || presentationTimeUs !in startUs..endUs) return bmpA
+                val localMs = (presentationTimeUs - startUs) / 1000L
+                val frame = OverlayAnimator.evaluateText(appContext, layer, localMs)
+                useB = !useB
+                val targetBmp = if (useB) bmpB else bmpA
+                val targetCanvas = if (useB) canvasB else canvasA
+                renderTextInto(
+                    targetCanvas,
+                    frame.visibleText,
+                    (frame.overrideColorHex ?: layer.colorHex).toInt()
+                )
+                return targetBmp
+            }
+
+            override fun getOverlaySettings(presentationTimeUs: Long): OverlaySettings {
+                if (presentationTimeUs !in startUs..endUs) return hiddenSettings
+                val localMs = (presentationTimeUs - startUs) / 1000L
+                val frame = OverlayAnimator.evaluateText(appContext, layer, localMs)
+                val shiftX = (frame.offsetXDp / 360f)
+                val shiftY = (frame.offsetYDp / 360f)
+                return OverlaySettings.Builder()
+                    .setAlphaScale(frame.alpha.coerceIn(0f, 1f))
+                    .setScale(frame.scaleX.coerceIn(0.1f, 3f), frame.scaleY.coerceIn(0.1f, 3f))
+                    .setRotationDegrees(frame.rotationDeg)
+                    .setBackgroundFrameAnchor(
+                        (ndcX + shiftX).coerceIn(-0.96f, 0.96f),
+                        (ndcY - shiftY).coerceIn(-0.96f, 0.96f)
+                    )
+                    .build()
+            }
+        }
+    }
+
+    private fun createTimedStickerOverlay(sticker: StickerLayer, targetHeight: Int): BitmapOverlay {
+        val sizePx = (sticker.sizeDp * (targetHeight / 720f) * 2.2f).toInt().coerceIn(84, 280)
+        val lottieComp = sticker.lottieAssetPath?.let { path ->
+            runCatching { LottieCompositionFactory.fromAssetSync(appContext, path).value }.getOrNull()
+        }
+
+        val bmpA = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+        allocatedOverlayBitmaps.add(bmpA)
+
+        val startUs = sticker.startTimeMs * 1000L
+        val endUs = (sticker.startTimeMs + sticker.durationMs) * 1000L
+        val ndcX = (sticker.posXFraction * 2f - 1f).coerceIn(-0.92f, 0.92f)
+        val ndcY = (1f - sticker.posYFraction * 2f).coerceIn(-0.92f, 0.92f)
         val visibleSettings = OverlaySettings.Builder()
             .setAlphaScale(1f)
             .setBackgroundFrameAnchor(ndcX, ndcY)
@@ -257,20 +356,36 @@ class HardwareVideoExporter(context: Context) {
             .setAlphaScale(0f)
             .build()
 
-        return object : BitmapOverlay() {
-            override fun getBitmap(presentationTimeUs: Long): Bitmap = bmp
-            override fun getOverlaySettings(presentationTimeUs: Long): OverlaySettings {
-                return if (presentationTimeUs in startUs..endUs) visibleSettings else hiddenSettings
+        if (lottieComp != null) {
+            val bmpB = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+            allocatedOverlayBitmaps.add(bmpB)
+            val canvasA = Canvas(bmpA)
+            val canvasB = Canvas(bmpB)
+            val drawable = LottieDrawable().apply {
+                composition = lottieComp
+                setBounds(0, 0, sizePx, sizePx)
+            }
+            return object : BitmapOverlay() {
+                private var useB = false
+
+                override fun getBitmap(presentationTimeUs: Long): Bitmap {
+                    val localMs = (presentationTimeUs - startUs).coerceAtLeast(0L)
+                    drawable.progress = (localMs % 1500L) / 1500f
+                    useB = !useB
+                    val targetBmp = if (useB) bmpB else bmpA
+                    val targetCanvas = if (useB) canvasB else canvasA
+                    targetCanvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
+                    drawable.draw(targetCanvas)
+                    return targetBmp
+                }
+
+                override fun getOverlaySettings(presentationTimeUs: Long): OverlaySettings {
+                    return if (presentationTimeUs in startUs..endUs) visibleSettings else hiddenSettings
+                }
             }
         }
-    }
 
-    private fun createTimedStickerOverlay(sticker: StickerLayer, targetHeight: Int): BitmapOverlay {
-        val sizePx = (sticker.sizeDp * (targetHeight / 720f) * 2.2f).toInt().coerceIn(72, 260)
-        val bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
-        allocatedOverlayBitmaps.add(bmp)
-        val canvas = Canvas(bmp)
-
+        val canvas = Canvas(bmpA)
         val badgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.argb(170, 12, 16, 26)
         }
@@ -293,21 +408,8 @@ class HardwareVideoExporter(context: Context) {
         val textY = cy - (glyphPaint.descent() + glyphPaint.ascent()) / 2f
         canvas.drawText(sticker.preset.glyph, cx, textY, glyphPaint)
 
-        val startUs = sticker.startTimeMs * 1000L
-        val endUs = (sticker.startTimeMs + sticker.durationMs) * 1000L
-        val ndcX = (sticker.posXFraction * 2f - 1f).coerceIn(-0.92f, 0.92f)
-        val ndcY = (1f - sticker.posYFraction * 2f).coerceIn(-0.92f, 0.92f)
-
-        val visibleSettings = OverlaySettings.Builder()
-            .setAlphaScale(1f)
-            .setBackgroundFrameAnchor(ndcX, ndcY)
-            .build()
-        val hiddenSettings = OverlaySettings.Builder()
-            .setAlphaScale(0f)
-            .build()
-
         return object : BitmapOverlay() {
-            override fun getBitmap(presentationTimeUs: Long): Bitmap = bmp
+            override fun getBitmap(presentationTimeUs: Long): Bitmap = bmpA
             override fun getOverlaySettings(presentationTimeUs: Long): OverlaySettings {
                 return if (presentationTimeUs in startUs..endUs) visibleSettings else hiddenSettings
             }

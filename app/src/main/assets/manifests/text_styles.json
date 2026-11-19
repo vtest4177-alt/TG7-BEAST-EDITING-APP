@@ -1,0 +1,589 @@
+{
+  "version": 1,
+  "templates": [
+    {
+      "id": "tpl_tg7_display",
+      "name": "TG7 Impact",
+      "fontFamily": "DISPLAY",
+      "colorHex": "0xFFFFFFFF",
+      "bgColorHex": "0x00000000",
+      "hasOutline": true,
+      "letterSpacingEm": 0.04
+    },
+    {
+      "id": "tpl_cyber_cyan",
+      "name": "Cyber Cyan",
+      "fontFamily": "MONO",
+      "colorHex": "0xFF00F0FF",
+      "bgColorHex": "0xCC060C16",
+      "hasOutline": true,
+      "letterSpacingEm": 0.08
+    },
+    {
+      "id": "tpl_blood_alert",
+      "name": "Blood Alert",
+      "fontFamily": "CONDENSED",
+      "colorHex": "0xFFFFFFFF",
+      "bgColorHex": "0xE6FF1030",
+      "hasOutline": false,
+      "letterSpacingEm": 0.05
+    },
+    {
+      "id": "tpl_gold_lux",
+      "name": "Gold Cinema",
+      "fontFamily": "SERIF",
+      "colorHex": "0xFFFACC15",
+      "bgColorHex": "0x00000000",
+      "hasOutline": true,
+      "letterSpacingEm": 0.12
+    },
+    {
+      "id": "tpl_dark_sub",
+      "name": "Dark Subtitle",
+      "fontFamily": "SANS",
+      "colorHex": "0xFFFFFFFF",
+      "bgColorHex": "0xCC0A0D14",
+      "hasOutline": false,
+      "letterSpacingEm": 0.02
+    },
+    {
+      "id": "tpl_neon_pill",
+      "name": "Neon Cyan Pill",
+      "fontFamily": "ROUNDED",
+      "colorHex": "0xFF000000",
+      "bgColorHex": "0xFF00F0FF",
+      "hasOutline": false,
+      "letterSpacingEm": 0.03
+    },
+    {
+      "id": "tpl_retro_term",
+      "name": "Terminal Green",
+      "fontFamily": "MONO",
+      "colorHex": "0xFF22C55E",
+      "bgColorHex": "0xD905120A",
+      "hasOutline": true,
+      "letterSpacingEm": 0.1
+    },
+    {
+      "id": "tpl_hollow_white",
+      "name": "Outline Bold",
+      "fontFamily": "DISPLAY",
+      "colorHex": "0xFFFFFFFF",
+      "bgColorHex": "0x00000000",
+      "hasOutline": true,
+      "letterSpacingEm": 0.06
+    },
+    {
+      "id": "tpl_fire_tag",
+      "name": "Flame Tag",
+      "fontFamily": "CONDENSED",
+      "colorHex": "0xFFFFD600",
+      "bgColorHex": "0xCC2B0A08",
+      "hasOutline": true,
+      "letterSpacingEm": 0.04
+    },
+    {
+      "id": "tpl_minimal_pro",
+      "name": "Clean Minimal",
+      "fontFamily": "SANS",
+      "colorHex": "0xFFF1F5F9",
+      "bgColorHex": "0x00000000",
+      "hasOutline": false,
+      "letterSpacingEm": 0.14
+    },
+    {
+      "id": "tpl_editorial",
+      "name": "Editorial Serif",
+      "fontFamily": "SERIF",
+      "colorHex": "0xFFFFFFFF",
+      "bgColorHex": "0x99111420",
+      "hasOutline": false,
+      "letterSpacingEm": 0.05
+    },
+    {
+      "id": "tpl_purple_vibe",
+      "name": "Hyper Violet",
+      "fontFamily": "ROUNDED",
+      "colorHex": "0xFFE9D5FF",
+      "bgColorHex": "0xCC241138",
+      "hasOutline": true,
+      "letterSpacingEm": 0.04
+    },
+    {
+      "id": "tpl_hud_box",
+      "name": "HUD Telemetry",
+      "fontFamily": "MONO",
+      "colorHex": "0xFF00F0FF",
+      "bgColorHex": "0xB3001A24",
+      "hasOutline": false,
+      "letterSpacingEm": 0.12
+    },
+    {
+      "id": "tpl_gaming_pop",
+      "name": "Gaming Pop",
+      "fontFamily": "DISPLAY",
+      "colorHex": "0xFF38BDF8",
+      "bgColorHex": "0xE60B0F1A",
+      "hasOutline": true,
+      "letterSpacingEm": 0.05
+    },
+    {
+      "id": "tpl_cinema_sub",
+      "name": "Yellow Movie Sub",
+      "fontFamily": "SANS",
+      "colorHex": "0xFFFDE047",
+      "bgColorHex": "0x00000000",
+      "hasOutline": true,
+      "letterSpacingEm": 0.02
+    },
+    {
+      "id": "tpl_crimson_glow",
+      "name": "Crimson Neon",
+      "fontFamily": "DISPLAY",
+      "colorHex": "0xFFFF385C",
+      "bgColorHex": "0x00000000",
+      "hasOutline": true,
+      "letterSpacingEm": 0.06
+    },
+    {
+      "id": "tpl_white_card",
+      "name": "White Label",
+      "fontFamily": "CONDENSED",
+      "colorHex": "0xFF090D16",
+      "bgColorHex": "0xFFFFFFFF",
+      "hasOutline": false,
+      "letterSpacingEm": 0.04
+    },
+    {
+      "id": "tpl_vhs_90s",
+      "name": "VHS Timecode",
+      "fontFamily": "MONO",
+      "colorHex": "0xFFFB7185",
+      "bgColorHex": "0xAA000000",
+      "hasOutline": true,
+      "letterSpacingEm": 0.15
+    }
+  ],
+  "animations": [
+    {
+      "id": "ta_none",
+      "name": "Static (None)",
+      "category": "Cinema & Fade",
+      "animKind": "NONE",
+      "speedMultiplier": 1.0
+    },
+    {
+      "id": "ta_fade_smooth",
+      "name": "Smooth Fade In/Out",
+      "category": "Cinema & Fade",
+      "animKind": "FADE_SMOOTH",
+      "speedMultiplier": 1.0
+    },
+    {
+      "id": "ta_fade_fast",
+      "name": "Quick Flash Fade",
+      "category": "Cinema & Fade",
+      "animKind": "FADE_SMOOTH",
+      "speedMultiplier": 1.8
+    },
+    {
+      "id": "ta_fade_slow",
+      "name": "Cinema Slow Reveal",
+      "category": "Cinema & Fade",
+      "animKind": "FADE_SMOOTH",
+      "speedMultiplier": 0.6
+    },
+    {
+      "id": "ta_blur_reveal",
+      "name": "Cinema Zoom Reveal",
+      "category": "Cinema & Fade",
+      "animKind": "ZOOM_REVEAL",
+      "speedMultiplier": 1.0
+    },
+    {
+      "id": "ta_subtitle_fade",
+      "name": "Subtitle Crisp Pop",
+      "category": "Cinema & Fade",
+      "animKind": "FADE_SMOOTH",
+      "speedMultiplier": 2.2
+    },
+    {
+      "id": "ta_credits_rise",
+      "name": "Credits Drift Up",
+      "category": "Cinema & Fade",
+      "animKind": "SLIDE_UP",
+      "speedMultiplier": 0.55
+    },
+    {
+      "id": "ta_title_drop",
+      "name": "Cinema Drop In",
+      "category": "Cinema & Fade",
+      "animKind": "SLIDE_DOWN",
+      "speedMultiplier": 0.9
+    },
+    {
+      "id": "ta_letter_expand",
+      "name": "Tracking Expand",
+      "category": "Cinema & Fade",
+      "animKind": "ZOOM_REVEAL",
+      "speedMultiplier": 0.8
+    },
+    {
+      "id": "ta_ink_bleed",
+      "name": "Deep Ink Dissolve",
+      "category": "Cinema & Fade",
+      "animKind": "FADE_SMOOTH",
+      "speedMultiplier": 0.75
+    },
+    {
+      "id": "ta_pop_bounce",
+      "name": "Bounce Pop",
+      "category": "In Pop",
+      "animKind": "BOUNCE_POP",
+      "speedMultiplier": 1.0
+    },
+    {
+      "id": "ta_pop_snap",
+      "name": "Snap Scale Pop",
+      "category": "In Pop",
+      "animKind": "BOUNCE_POP",
+      "speedMultiplier": 1.6
+    },
+    {
+      "id": "ta_pop_elastic",
+      "name": "Elastic Spring",
+      "category": "In Pop",
+      "animKind": "ELASTIC_IN",
+      "speedMultiplier": 1.0
+    },
+    {
+      "id": "ta_pop_rubber",
+      "name": "Rubber Expand",
+      "category": "In Pop",
+      "animKind": "ELASTIC_IN",
+      "speedMultiplier": 1.4
+    },
+    {
+      "id": "ta_zoom_slam",
+      "name": "Zoom Slam Impact",
+      "category": "In Pop",
+      "animKind": "ZOOM_SLAM",
+      "speedMultiplier": 1.0
+    },
+    {
+      "id": "ta_zoom_punch",
+      "name": "Heavy Punch In",
+      "category": "In Pop",
+      "animKind": "ZOOM_SLAM",
+      "speedMultiplier": 1.5
+    },
+    {
+      "id": "ta_zoom_out_drop",
+      "name": "Drop Zoom Out",
+      "category": "In Pop",
+      "animKind": "ZOOM_REVEAL",
+      "speedMultiplier": 1.3
+    },
+    {
+      "id": "ta_pop_tilt",
+      "name": "Tilt Pop Entry",
+      "category": "In Pop",
+      "animKind": "SPIN_POP",
+      "speedMultiplier": 1.0
+    },
+    {
+      "id": "ta_bubble_in",
+      "name": "Bubble Inflate",
+      "category": "In Pop",
+      "animKind": "BOUNCE_POP",
+      "speedMultiplier": 0.85
+    },
+    {
+      "id": "ta_stomp_hit",
+      "name": "Beat Stomp",
+      "category": "In Pop",
+      "animKind": "ZOOM_SLAM",
+      "speedMultiplier": 1.9
+    },
+    {
+      "id": "ta_typewriter",
+      "name": "Typewriter Pro",
+      "category": "Type & Reveal",
+      "animKind": "TYPEWRITER",
+      "speedMultiplier": 1.0
+    },
+    {
+      "id": "ta_type_fast",
+      "name": "Rapid Typewriter",
+      "category": "Type & Reveal",
+      "animKind": "TYPEWRITER",
+      "speedMultiplier": 1.8
+    },
+    {
+      "id": "ta_type_slow",
+      "name": "Story Typewriter",
+      "category": "Type & Reveal",
+      "animKind": "TYPEWRITER",
+      "speedMultiplier": 0.65
+    },
+    {
+      "id": "ta_terminal_cursor",
+      "name": "Terminal Decode",
+      "category": "Type & Reveal",
+      "animKind": "TYPEWRITER_CURSOR",
+      "speedMultiplier": 1.0
+    },
+    {
+      "id": "ta_cyber_decode",
+      "name": "Matrix Scramble",
+      "category": "Type & Reveal",
+      "animKind": "MATRIX_DECODE",
+      "speedMultiplier": 1.0
+    },
+    {
+      "id": "ta_cyber_decode_fast",
+      "name": "Fast Cipher Reveal",
+      "category": "Type & Reveal",
+      "animKind": "MATRIX_DECODE",
+      "speedMultiplier": 1.6
+    },
+    {
+      "id": "ta_word_pop",
+      "name": "Word-by-Word Pop",
+      "category": "Type & Reveal",
+      "animKind": "WORD_REVEAL",
+      "speedMultiplier": 1.0
+    },
+    {
+      "id": "ta_word_fast",
+      "name": "Rapid Word Punch",
+      "category": "Type & Reveal",
+      "animKind": "WORD_REVEAL",
+      "speedMultiplier": 1.7
+    },
+    {
+      "id": "ta_karaoke_gold",
+      "name": "Karaoke Highlight",
+      "category": "Type & Reveal",
+      "animKind": "KARAOKE_GLOW",
+      "speedMultiplier": 1.0
+    },
+    {
+      "id": "ta_karaoke_cyan",
+      "name": "Neon Read Sweep",
+      "category": "Type & Reveal",
+      "animKind": "KARAOKE_GLOW",
+      "speedMultiplier": 1.4
+    },
+    {
+      "id": "ta_glitch_flicker",
+      "name": "Glitch Flicker",
+      "category": "Glitch & Cyber",
+      "animKind": "GLITCH_FLICKER",
+      "speedMultiplier": 1.0
+    },
+    {
+      "id": "ta_glitch_heavy",
+      "name": "Heavy Cyber Tear",
+      "category": "Glitch & Cyber",
+      "animKind": "GLITCH_FLICKER",
+      "speedMultiplier": 1.7
+    },
+    {
+      "id": "ta_strobe_flash",
+      "name": "Neon Strobe Pop",
+      "category": "Glitch & Cyber",
+      "animKind": "STROBE_FLASH",
+      "speedMultiplier": 1.0
+    },
+    {
+      "id": "ta_crt_poweron",
+      "name": "CRT Power On",
+      "category": "Glitch & Cyber",
+      "animKind": "CRT_ON",
+      "speedMultiplier": 1.0
+    },
+    {
+      "id": "ta_cyber_jitter",
+      "name": "RGB Jitter Cut",
+      "category": "Glitch & Cyber",
+      "animKind": "SHAKE_IMPACT",
+      "speedMultiplier": 1.5
+    },
+    {
+      "id": "ta_vhs_tracking",
+      "name": "VHS Signal Shake",
+      "category": "Glitch & Cyber",
+      "animKind": "GLITCH_FLICKER",
+      "speedMultiplier": 0.85
+    },
+    {
+      "id": "ta_static_pop",
+      "name": "Signal Static Entry",
+      "category": "Glitch & Cyber",
+      "animKind": "STROBE_FLASH",
+      "speedMultiplier": 1.5
+    },
+    {
+      "id": "ta_scan_flicker",
+      "name": "HUD Scan Pulse",
+      "category": "Glitch & Cyber",
+      "animKind": "PULSE_GLOW",
+      "speedMultiplier": 1.8
+    },
+    {
+      "id": "ta_overload_hit",
+      "name": "Overload Impact",
+      "category": "Glitch & Cyber",
+      "animKind": "SHAKE_IMPACT",
+      "speedMultiplier": 2.0
+    },
+    {
+      "id": "ta_neon_blink",
+      "name": "Broken Neon Sign",
+      "category": "Glitch & Cyber",
+      "animKind": "STROBE_FLASH",
+      "speedMultiplier": 0.75
+    },
+    {
+      "id": "ta_slide_up",
+      "name": "Slide Up Clean",
+      "category": "Kinetic Motion",
+      "animKind": "SLIDE_UP",
+      "speedMultiplier": 1.0
+    },
+    {
+      "id": "ta_slide_down",
+      "name": "Slide Down Clean",
+      "category": "Kinetic Motion",
+      "animKind": "SLIDE_DOWN",
+      "speedMultiplier": 1.0
+    },
+    {
+      "id": "ta_slide_left",
+      "name": "Whip Left Entry",
+      "category": "Kinetic Motion",
+      "animKind": "SLIDE_LEFT",
+      "speedMultiplier": 1.0
+    },
+    {
+      "id": "ta_slide_right",
+      "name": "Whip Right Entry",
+      "category": "Kinetic Motion",
+      "animKind": "SLIDE_RIGHT",
+      "speedMultiplier": 1.0
+    },
+    {
+      "id": "ta_swipe_up_fast",
+      "name": "Fast Swipe Up",
+      "category": "Kinetic Motion",
+      "animKind": "SLIDE_UP",
+      "speedMultiplier": 1.7
+    },
+    {
+      "id": "ta_swipe_left_fast",
+      "name": "Fast Swipe Left",
+      "category": "Kinetic Motion",
+      "animKind": "SLIDE_LEFT",
+      "speedMultiplier": 1.7
+    },
+    {
+      "id": "ta_spin_flip",
+      "name": "360 Spin Pop",
+      "category": "Kinetic Motion",
+      "animKind": "SPIN_POP",
+      "speedMultiplier": 1.3
+    },
+    {
+      "id": "ta_swing_in",
+      "name": "Pendulum Swing",
+      "category": "Kinetic Motion",
+      "animKind": "SPIN_POP",
+      "speedMultiplier": 0.8
+    },
+    {
+      "id": "ta_rush_in",
+      "name": "Turbo Slide Right",
+      "category": "Kinetic Motion",
+      "animKind": "SLIDE_RIGHT",
+      "speedMultiplier": 1.8
+    },
+    {
+      "id": "ta_fall_in",
+      "name": "Gravity Drop",
+      "category": "Kinetic Motion",
+      "animKind": "SLIDE_DOWN",
+      "speedMultiplier": 1.5
+    },
+    {
+      "id": "ta_wave_float",
+      "name": "Wave Float Loop",
+      "category": "Loop Bounce",
+      "animKind": "WAVE_FLOAT",
+      "speedMultiplier": 1.0
+    },
+    {
+      "id": "ta_wave_deep",
+      "name": "Deep Ocean Drift",
+      "category": "Loop Bounce",
+      "animKind": "WAVE_FLOAT",
+      "speedMultiplier": 1.6
+    },
+    {
+      "id": "ta_pulse_beat",
+      "name": "Heartbeat Pulse",
+      "category": "Loop Bounce",
+      "animKind": "PULSE_GLOW",
+      "speedMultiplier": 1.0
+    },
+    {
+      "id": "ta_pulse_bass",
+      "name": "Bass Drop Pump",
+      "category": "Loop Bounce",
+      "animKind": "PULSE_GLOW",
+      "speedMultiplier": 1.8
+    },
+    {
+      "id": "ta_shake_loop",
+      "name": "Camera Shake Loop",
+      "category": "Loop Bounce",
+      "animKind": "SHAKE_IMPACT",
+      "speedMultiplier": 1.0
+    },
+    {
+      "id": "ta_shake_micro",
+      "name": "Micro Vibrate",
+      "category": "Loop Bounce",
+      "animKind": "SHAKE_IMPACT",
+      "speedMultiplier": 0.65
+    },
+    {
+      "id": "ta_rainbow_hue",
+      "name": "Neon Color Cycle",
+      "category": "Loop Bounce",
+      "animKind": "RAINBOW_NEON",
+      "speedMultiplier": 1.0
+    },
+    {
+      "id": "ta_rainbow_fast",
+      "name": "Hyper RGB Cycle",
+      "category": "Loop Bounce",
+      "animKind": "RAINBOW_NEON",
+      "speedMultiplier": 1.8
+    },
+    {
+      "id": "ta_hover_bounce",
+      "name": "Floating Bounce",
+      "category": "Loop Bounce",
+      "animKind": "WAVE_FLOAT",
+      "speedMultiplier": 1.3
+    },
+    {
+      "id": "ta_wobble_rock",
+      "name": "Rocking Tilt Loop",
+      "category": "Loop Bounce",
+      "animKind": "WOBBLE_TILT",
+      "speedMultiplier": 1.0
+    }
+  ]
+}

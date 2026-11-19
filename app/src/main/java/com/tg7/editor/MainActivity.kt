@@ -257,15 +257,20 @@ class MainActivity : ComponentActivity() {
                     }
 
                     if (showTextSheet) {
+                        val editingTextLayer = if (selection?.trackType == com.tg7.editor.model.TrackType.TEXT) {
+                            activeProject.textLayers.firstOrNull { it.id == selection?.itemId }
+                        } else null
                         AddTextSheet(
-                            onConfirmText = viewModel::addTextLayer,
+                            editingLayer = editingTextLayer,
+                            onConfirmText = viewModel::addOrUpdateTextLayer,
                             onDismiss = { viewModel.setTextSheetVisible(false) }
                         )
                     }
 
                     if (showStickerSheet) {
                         AddStickerSheet(
-                            onSelectSticker = viewModel::addStickerLayer,
+                            onSelectLottieSticker = viewModel::addLottieStickerLayer,
+                            onSelectVectorSticker = viewModel::addStickerLayer,
                             onDismiss = { viewModel.setStickerSheetVisible(false) }
                         )
                     }

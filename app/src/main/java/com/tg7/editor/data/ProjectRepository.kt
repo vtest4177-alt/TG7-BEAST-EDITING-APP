@@ -14,6 +14,7 @@ import com.tg7.editor.model.EditorProject
 import com.tg7.editor.model.MediaKind
 import com.tg7.editor.model.StickerLayer
 import com.tg7.editor.model.StickerPreset
+import com.tg7.editor.model.TextFontFamily
 import com.tg7.editor.model.TextLayer
 import com.tg7.editor.model.TimelineClip
 import kotlinx.coroutines.Dispatchers
@@ -81,7 +82,13 @@ class ProjectRepository(context: Context) {
                 posXFraction = t.posXFraction,
                 posYFraction = t.posYFraction,
                 colorHex = t.colorHex,
-                fontSizeSp = t.fontSizeSp
+                fontSizeSp = t.fontSizeSp,
+                templateId = t.templateId,
+                animationId = t.animationId,
+                fontFamily = t.fontFamily.wireName,
+                bgColorHex = t.bgColorHex,
+                hasOutline = t.hasOutline,
+                letterSpacingEm = t.letterSpacingEm
             )
         }
         val stickerEntities = project.stickerLayers.map { s ->
@@ -94,7 +101,9 @@ class ProjectRepository(context: Context) {
                 posXFraction = s.posXFraction,
                 posYFraction = s.posYFraction,
                 sizeDp = s.sizeDp,
-                tintHex = s.tintHex
+                tintHex = s.tintHex,
+                lottieAssetPath = s.lottieAssetPath,
+                label = s.label
             )
         }
         dao.saveProjectFull(
@@ -210,7 +219,13 @@ class ProjectRepository(context: Context) {
                     posXFraction = t.posXFraction,
                     posYFraction = t.posYFraction,
                     colorHex = t.colorHex,
-                    fontSizeSp = t.fontSizeSp
+                    fontSizeSp = t.fontSizeSp,
+                    templateId = t.templateId,
+                    animationId = t.animationId,
+                    fontFamily = TextFontFamily.fromWire(t.fontFamily),
+                    bgColorHex = t.bgColorHex,
+                    hasOutline = t.hasOutline,
+                    letterSpacingEm = t.letterSpacingEm
                 )
             },
             stickerLayers = stickerLayers.sortedBy { it.startTimeMs }.map { s ->
@@ -223,7 +238,9 @@ class ProjectRepository(context: Context) {
                     posXFraction = s.posXFraction,
                     posYFraction = s.posYFraction,
                     sizeDp = s.sizeDp,
-                    tintHex = s.tintHex
+                    tintHex = s.tintHex,
+                    lottieAssetPath = s.lottieAssetPath,
+                    label = s.label
                 )
             }
         )

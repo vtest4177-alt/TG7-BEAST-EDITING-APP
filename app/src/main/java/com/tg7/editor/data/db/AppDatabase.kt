@@ -98,7 +98,13 @@ data class TextLayerEntity(
     val posXFraction: Float,
     val posYFraction: Float,
     val colorHex: Long,
-    val fontSizeSp: Float
+    val fontSizeSp: Float,
+    val templateId: String = "tpl_tg7_display",
+    val animationId: String = "ta_none",
+    val fontFamily: String = "DISPLAY",
+    val bgColorHex: Long = 0L,
+    val hasOutline: Boolean = true,
+    val letterSpacingEm: Float = 0.04f
 )
 
 @Entity(
@@ -122,7 +128,9 @@ data class StickerLayerEntity(
     val posXFraction: Float,
     val posYFraction: Float,
     val sizeDp: Float,
-    val tintHex: Long
+    val tintHex: Long,
+    val lottieAssetPath: String? = null,
+    val label: String = "Sticker"
 )
 
 data class ProjectWithLayers(
@@ -211,7 +219,7 @@ interface ProjectDao {
         TextLayerEntity::class,
         StickerLayerEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -228,6 +236,19 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE text_layers ADD COLUMN templateId TEXT NOT NULL DEFAULT 'tpl_tg7_display'")
+                db.execSQL("ALTER TABLE text_layers ADD COLUMN animationId TEXT NOT NULL DEFAULT 'ta_none'")
+                db.execSQL("ALTER TABLE text_layers ADD COLUMN fontFamily TEXT NOT NULL DEFAULT 'DISPLAY'")
+                db.execSQL("ALTER TABLE text_layers ADD COLUMN bgColorHex INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE text_layers ADD COLUMN hasOutline INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE text_layers ADD COLUMN letterSpacingEm REAL NOT NULL DEFAULT 0.04")
+                db.execSQL("ALTER TABLE sticker_layers ADD COLUMN lottieAssetPath TEXT")
+                db.execSQL("ALTER TABLE sticker_layers ADD COLUMN label TEXT NOT NULL DEFAULT 'Sticker'")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -235,7 +256,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "tg7_editor_studio.db"
                 )
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .fallbackToDestructiveMigration()
                     .build()
                     .also { INSTANCE = it }

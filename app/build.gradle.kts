@@ -12,8 +12,8 @@ android {
         applicationId = "com.tg7.editor"
         minSdk = 24
         targetSdk = 34
-        versionCode = 3
-        versionName = "3.0.0-phase3"
+        versionCode = 4
+        versionName = "4.0.0-phase4"
     }
 
     buildFeatures {
@@ -89,4 +89,7 @@ dependencies {
     // Coil 2.6.0 (Apache 2.0): Native image & video frame thumbnails
     implementation("io.coil-kt:coil-compose:2.6.0")
     implementation("io.coil-kt:coil-video:2.6.0")
+
+    // Lottie Compose 6.4.1 (Apache 2.0): Vector animated stickers in Compose & Transformer export
+    implementation("com.airbnb.android:lottie-compose:6.4.1")
 }

@@ -14,10 +14,12 @@ import com.tg7.editor.model.CanvasAspectRatio
 import com.tg7.editor.model.EditorProject
 import com.tg7.editor.model.ExportResolution
 import com.tg7.editor.model.ExportState
+import com.tg7.editor.model.LottieStickerSpec
 import com.tg7.editor.model.MediaKind
 import com.tg7.editor.model.RecentMediaItem
 import com.tg7.editor.model.StickerLayer
 import com.tg7.editor.model.StickerPreset
+import com.tg7.editor.model.TextFontFamily
 import com.tg7.editor.model.TextLayer
 import com.tg7.editor.model.TimelineClip
 import com.tg7.editor.model.TimelineSelection
@@ -312,24 +314,85 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun addTextLayer(text: String, colorHex: Long, fontSizeSp: Float) {
+    fun addOrUpdateTextLayer(
+        editingLayerId: String?,
+        text: String,
+        colorHex: Long,
+        fontSizeSp: Float,
+        templateId: String,
+        animationId: String,
+        fontFamily: TextFontFamily,
+        bgColorHex: Long,
+        hasOutline: Boolean,
+        letterSpacingEm: Float
+    ) {
         val proj = activeProject() ?: return
         val cleanText = text.trim().ifBlank { return }
+        if (editingLayerId != null && proj.textLayers.any { it.id == editingLayerId }) {
+            val updatedLayers = proj.textLayers.map { existing ->
+                if (existing.id == editingLayerId) {
+                    existing.copy(
+                        text = cleanText,
+                        colorHex = colorHex,
+                        fontSizeSp = fontSizeSp,
+                        templateId = templateId,
+                        animationId = animationId,
+                        fontFamily = fontFamily,
+                        bgColorHex = bgColorHex,
+                        hasOutline = hasOutline,
+                        letterSpacingEm = letterSpacingEm
+                    )
+                } else existing
+            }
+            mutateProject(
+                newProject = proj.copy(textLayers = updatedLayers),
+                newSelection = TimelineSelection(TrackType.TEXT, editingLayerId),
+                rebuildPlayer = false
+            )
+        } else {
+            val start = playerController.globalPositionMs.value
+            val dur = 3000L.coerceAtMost((proj.totalDurationMs - start).coerceAtLeast(1500L))
+            val layer = TextLayer(
+                text = cleanText,
+                startTimeMs = start,
+                durationMs = dur,
+                colorHex = colorHex,
+                fontSizeSp = fontSizeSp,
+                templateId = templateId,
+                animationId = animationId,
+                fontFamily = fontFamily,
+                bgColorHex = bgColorHex,
+                hasOutline = hasOutline,
+                letterSpacingEm = letterSpacingEm
+            )
+            mutateProject(
+                newProject = proj.copy(textLayers = proj.textLayers + layer),
+                newSelection = TimelineSelection(TrackType.TEXT, layer.id),
+                rebuildPlayer = false
+            )
+        }
+        _showTextSheet.value = false
+    }
+
+    fun addLottieStickerLayer(spec: LottieStickerSpec) {
+        val proj = activeProject() ?: return
         val start = playerController.globalPositionMs.value
         val dur = 3000L.coerceAtMost((proj.totalDurationMs - start).coerceAtLeast(1500L))
-        val layer = TextLayer(
-            text = cleanText,
+        val sticker = StickerLayer(
+            preset = StickerPreset.SPARKLE,
             startTimeMs = start,
             durationMs = dur,
-            colorHex = colorHex,
-            fontSizeSp = fontSizeSp
+            sizeDp = 76f,
+            tintHex = spec.tintHex,
+            lottieAssetPath = spec.lottieAssetPath,
+            label = spec.name
         )
         mutateProject(
-            newProject = proj.copy(textLayers = proj.textLayers + layer),
-            newSelection = TimelineSelection(TrackType.TEXT, layer.id),
+            newProject = proj.copy(stickerLayers = proj.stickerLayers + sticker),
+            newSelection = TimelineSelection(TrackType.STICKER, sticker.id),
             rebuildPlayer = false
         )
-        _showTextSheet.value = false
+        _showStickerSheet.value = false
     }
 
     fun addStickerLayer(preset: StickerPreset) {
@@ -340,7 +403,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             preset = preset,
             startTimeMs = start,
             durationMs = dur,
-            tintHex = preset.defaultTintHex
+            tintHex = preset.defaultTintHex,
+            lottieAssetPath = null,
+            label = preset.label
         )
         mutateProject(
             newProject = proj.copy(stickerLayers = proj.stickerLayers + sticker),

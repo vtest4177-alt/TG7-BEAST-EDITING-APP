@@ -1,0 +1,117 @@
+{
+  "version": 1,
+  "stickers": [
+    {
+      "id": "st_lot_cyan_pulse",
+      "name": "Neon Pulse",
+      "category": "Energy & Gaming",
+      "lottieAssetPath": "lottie/cyan_pulse.json",
+      "tintHex": "0xFF00F0FF"
+    },
+    {
+      "id": "st_lot_red_live",
+      "name": "LIVE Rec Dot",
+      "category": "Social & HUD",
+      "lottieAssetPath": "lottie/red_live.json",
+      "tintHex": "0xFFFF1030"
+    },
+    {
+      "id": "st_lot_gold_star",
+      "name": "Spinning Star",
+      "category": "Shapes & Spark",
+      "lottieAssetPath": "lottie/gold_star.json",
+      "tintHex": "0xFFFACC15"
+    },
+    {
+      "id": "st_lot_cyber_hex",
+      "name": "Cyber Hexagon",
+      "category": "Energy & Gaming",
+      "lottieAssetPath": "lottie/cyber_hex.json",
+      "tintHex": "0xFF00F0FF"
+    },
+    {
+      "id": "st_lot_fire_core",
+      "name": "Flame Burst",
+      "category": "Energy & Gaming",
+      "lottieAssetPath": "lottie/fire_core.json",
+      "tintHex": "0xFFFF590D"
+    },
+    {
+      "id": "st_lot_spark_burst",
+      "name": "Magic Spark",
+      "category": "Shapes & Spark",
+      "lottieAssetPath": "lottie/spark_burst.json",
+      "tintHex": "0xFFC084FC"
+    },
+    {
+      "id": "st_lot_green_radar",
+      "name": "Radar Target",
+      "category": "Social & HUD",
+      "lottieAssetPath": "lottie/green_radar.json",
+      "tintHex": "0xFF22C55E"
+    },
+    {
+      "id": "st_lot_pink_star",
+      "name": "Pop Star",
+      "category": "Shapes & Spark",
+      "lottieAssetPath": "lottie/pink_star.json",
+      "tintHex": "0xFFF43F5E"
+    },
+    {
+      "id": "st_lot_hud_shield",
+      "name": "HUD Shield",
+      "category": "Energy & Gaming",
+      "lottieAssetPath": "lottie/hud_shield.json",
+      "tintHex": "0xFF38BDF8"
+    },
+    {
+      "id": "st_lot_volt_box",
+      "name": "Volt Frame",
+      "category": "Energy & Gaming",
+      "lottieAssetPath": "lottie/volt_box.json",
+      "tintHex": "0xFFFACC15"
+    },
+    {
+      "id": "st_lot_cyan_star",
+      "name": "Cyan Star",
+      "category": "Shapes & Spark",
+      "lottieAssetPath": "lottie/cyan_star.json",
+      "tintHex": "0xFF00F0FF"
+    },
+    {
+      "id": "st_lot_crimson_hex",
+      "name": "Crimson Core",
+      "category": "Energy & Gaming",
+      "lottieAssetPath": "lottie/crimson_hex.json",
+      "tintHex": "0xFFFF1030"
+    },
+    {
+      "id": "st_lot_amber_ring",
+      "name": "Sonic Wave",
+      "category": "Social & HUD",
+      "lottieAssetPath": "lottie/amber_ring.json",
+      "tintHex": "0xFFFA9124"
+    },
+    {
+      "id": "st_lot_mint_burst",
+      "name": "Mint Sparkle",
+      "category": "Shapes & Spark",
+      "lottieAssetPath": "lottie/mint_burst.json",
+      "tintHex": "0xFF34D399"
+    },
+    {
+      "id": "st_lot_white_flash",
+      "name": "Studio Flash",
+      "category": "Social & HUD",
+      "lottieAssetPath": "lottie/white_flash.json",
+      "tintHex": "0xFFF8FAFC"
+    },
+    {
+      "id": "st_lot_ultra_hex",
+      "name": "Prism Hex",
+      "category": "Shapes & Spark",
+      "lottieAssetPath": "lottie/ultra_hex.json",
+      "tintHex": "0xFFA855F7"
+    }
+  ]
+}

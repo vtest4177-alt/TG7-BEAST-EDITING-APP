@@ -178,7 +178,7 @@ fun MultiTrackTimeline(
                         trackType = TrackType.STICKER,
                         itemId = sticker.id,
                         index = idx,
-                        label = "${sticker.preset.glyph} ${sticker.preset.label}",
+                        label = "${if (sticker.lottieAssetPath != null) "✦" else sticker.preset.glyph} ${sticker.label}",
                         startMs = sticker.startTimeMs,
                         durationMs = sticker.durationMs,
                         trimStartMs = sticker.startTimeMs,

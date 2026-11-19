@@ -137,6 +137,47 @@ data class AudioClip(
         get() = (trimEndMs - trimStartMs).coerceAtLeast(300L)
 }
 
+enum class TextFontFamily(val wireName: String, val label: String) {
+    DISPLAY("DISPLAY", "Impact"),
+    SANS("SANS", "Clean Sans"),
+    SERIF("SERIF", "Cinema Serif"),
+    MONO("MONO", "Cyber Mono"),
+    CONDENSED("CONDENSED", "Condensed"),
+    ROUNDED("ROUNDED", "Rounded");
+
+    companion object {
+        fun fromWire(value: String): TextFontFamily {
+            return entries.firstOrNull { it.wireName == value } ?: DISPLAY
+        }
+    }
+}
+
+data class TextStyleTemplate(
+    val id: String,
+    val name: String,
+    val fontFamily: TextFontFamily,
+    val colorHex: Long,
+    val bgColorHex: Long,
+    val hasOutline: Boolean,
+    val letterSpacingEm: Float
+)
+
+data class TextAnimSpec(
+    val id: String,
+    val name: String,
+    val category: String,
+    val animKind: String,
+    val speedMultiplier: Float = 1.0f
+)
+
+data class LottieStickerSpec(
+    val id: String,
+    val name: String,
+    val category: String,
+    val lottieAssetPath: String,
+    val tintHex: Long
+)
+
 data class TextLayer(
     val id: String = UUID.randomUUID().toString(),
     val text: String,
@@ -145,7 +186,13 @@ data class TextLayer(
     val posXFraction: Float = 0.5f,
     val posYFraction: Float = 0.5f,
     val colorHex: Long = 0xFFFFFFFF,
-    val fontSizeSp: Float = 26f
+    val fontSizeSp: Float = 26f,
+    val templateId: String = "tpl_tg7_display",
+    val animationId: String = "ta_none",
+    val fontFamily: TextFontFamily = TextFontFamily.DISPLAY,
+    val bgColorHex: Long = 0x00000000L,
+    val hasOutline: Boolean = true,
+    val letterSpacingEm: Float = 0.04f
 )
 
 data class StickerLayer(
@@ -155,8 +202,10 @@ data class StickerLayer(
     val durationMs: Long = 3000L,
     val posXFraction: Float = 0.5f,
     val posYFraction: Float = 0.35f,
-    val sizeDp: Float = 56f,
-    val tintHex: Long = preset.defaultTintHex
+    val sizeDp: Float = 68f,
+    val tintHex: Long = preset.defaultTintHex,
+    val lottieAssetPath: String? = null,
+    val label: String = preset.label
 )
 
 data class TimelineSelection(
