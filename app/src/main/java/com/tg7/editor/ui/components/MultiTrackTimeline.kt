@@ -72,6 +72,12 @@ private data class TrackBlock(
     val accentColor: Color
 )
 
+private data class CutJunction(
+    val cutIndex: Int,
+    val timeMs: Long,
+    val hasTransition: Boolean
+)
+
 private enum class MultiDragMode {
     SCRUB,
     MOVE_LAYER,
@@ -94,6 +100,7 @@ fun MultiTrackTimeline(
     onMoveVideoClip: (fromIdx: Int, toIdx: Int) -> Unit,
     onMoveLayerStart: (TrackType, String, Long) -> Unit,
     onTrimItem: (TrackType, String, Long, Long) -> Unit,
+    onOpenTransitionPicker: (cutIndex: Int) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
@@ -197,7 +204,26 @@ fun MultiTrackTimeline(
         }.distinct()
     }
 
+    val cutJunctions = remember(project.clips) {
+        buildList {
+            var acc = 0L
+            for (i in 0 until project.clips.lastIndex) {
+                val c = project.clips[i]
+                acc += c.activeDurationMs
+                add(
+                    CutJunction(
+                        cutIndex = i,
+                        timeMs = acc,
+                        hasTransition = !c.outTransitionId.isNullOrBlank()
+                    )
+                )
+            }
+        }
+    }
+
+    val junctionHitPx = with(density) { 20.dp.toPx() }
     val currentBlocks by rememberUpdatedState(blocks)
+    val currentJunctions by rememberUpdatedState(cutJunctions)
     val currentSelection by rememberUpdatedState(selection)
     val currentGlobalPos by rememberUpdatedState(globalPositionMs)
     val currentTotalDur by rememberUpdatedState(project.totalDurationMs)
@@ -308,6 +334,19 @@ fun MultiTrackTimeline(
                         val playheadPx = (currentGlobalPos / 1000f) * pps
                         val worldMs = (((offset.x - centerX + playheadPx) / pps) * 1000f).toLong()
                         val lane = laneForY(offset.y)
+
+                        if (lane == TrackType.VIDEO) {
+                            val shiftX = centerX - playheadPx
+                            val hitCut = currentJunctions.firstOrNull { j ->
+                                val jx = (j.timeMs / 1000f) * pps + shiftX
+                                abs(offset.x - jx) <= junctionHitPx
+                            }
+                            if (hitCut != null) {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onOpenTransitionPicker(hitCut.cutIndex)
+                                return@detectTapGestures
+                            }
+                        }
 
                         val hit = if (lane != null) {
                             currentBlocks.firstOrNull { b ->
@@ -574,6 +613,52 @@ fun MultiTrackTimeline(
                             topLeft = Offset(drawLeft + widthPx - handleW + 1f, topY),
                             size = Size(handleW, laneHeightPx),
                             cornerRadius = CornerRadius(5f, 5f)
+                        )
+                    }
+                }
+
+                // Transition Cut Junction Badges on Video Track
+                val (videoTopY, _) = yRangeForTrack(TrackType.VIDEO)
+                val badgeCy = videoTopY + laneHeightPx / 2f
+                val badgeHalf = 11f
+                cutJunctions.forEach { j ->
+                    val jx = (j.timeMs / 1000f) * pxPerSec + shiftX
+                    if (jx < -20f || jx > size.width + 20f) return@forEach
+                    val bgColor = if (j.hasTransition) TG7Colors.NeonCyan else Color(0xFF101726)
+                    val strokeColor = if (j.hasTransition) Color.White else TG7Colors.NeonCyan
+                    drawRoundRect(
+                        color = bgColor,
+                        topLeft = Offset(jx - badgeHalf, badgeCy - badgeHalf),
+                        size = Size(badgeHalf * 2f, badgeHalf * 2f),
+                        cornerRadius = CornerRadius(6f, 6f)
+                    )
+                    drawRoundRect(
+                        color = strokeColor,
+                        topLeft = Offset(jx - badgeHalf, badgeCy - badgeHalf),
+                        size = Size(badgeHalf * 2f, badgeHalf * 2f),
+                        cornerRadius = CornerRadius(6f, 6f),
+                        style = Stroke(width = 2f)
+                    )
+                    val glyphColor = if (j.hasTransition) Color.Black else Color.White
+                    if (j.hasTransition) {
+                        drawLine(
+                            color = glyphColor,
+                            start = Offset(jx - 4f, badgeCy + 4f),
+                            end = Offset(jx + 4f, badgeCy - 4f),
+                            strokeWidth = 2.5f
+                        )
+                    } else {
+                        drawLine(
+                            color = glyphColor,
+                            start = Offset(jx - 4.5f, badgeCy),
+                            end = Offset(jx + 4.5f, badgeCy),
+                            strokeWidth = 2.2f
+                        )
+                        drawLine(
+                            color = glyphColor,
+                            start = Offset(jx, badgeCy - 4.5f),
+                            end = Offset(jx, badgeCy + 4.5f),
+                            strokeWidth = 2.2f
                         )
                     }
                 }

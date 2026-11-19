@@ -40,6 +40,7 @@ import androidx.compose.material.icons.automirrored.rounded.Redo
 import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AspectRatio
+import androidx.compose.material.icons.rounded.AutoFixHigh
 import androidx.compose.material.icons.rounded.CheckBox
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
@@ -139,6 +140,8 @@ fun EditorScreen(
     onAddAudioClick: () -> Unit,
     onAddTextClick: () -> Unit,
     onAddStickerClick: () -> Unit,
+    onOpenTransitionPicker: (cutIndex: Int) -> Unit,
+    onOpenTransitionsDock: () -> Unit,
     onToggleFullscreen: () -> Unit,
     onDismissError: () -> Unit
 ) {
@@ -414,7 +417,8 @@ fun EditorScreen(
                         onSelectItem = onSelectItem,
                         onMoveVideoClip = onMoveVideoClip,
                         onMoveLayerStart = onMoveLayerStart,
-                        onTrimItem = onTrimItem
+                        onTrimItem = onTrimItem,
+                        onOpenTransitionPicker = onOpenTransitionPicker
                     )
                     ScrollablePhase2ToolDock(
                         aspectLabel = project.aspectRatio.label,
@@ -424,6 +428,7 @@ fun EditorScreen(
                         onAddAudio = onAddAudioClick,
                         onAddText = onAddTextClick,
                         onAddSticker = onAddStickerClick,
+                        onTransitions = onOpenTransitionsDock,
                         onTrimToggle = onToggleTrimPanel,
                         onSplit = onSplitAtPlayhead,
                         onDuplicate = onDuplicateSelected,
@@ -489,7 +494,8 @@ fun EditorScreen(
                     onSelectItem = onSelectItem,
                     onMoveVideoClip = onMoveVideoClip,
                     onMoveLayerStart = onMoveLayerStart,
-                    onTrimItem = onTrimItem
+                    onTrimItem = onTrimItem,
+                    onOpenTransitionPicker = onOpenTransitionPicker
                 )
             }
 
@@ -503,6 +509,7 @@ fun EditorScreen(
                 onAddAudio = onAddAudioClick,
                 onAddText = onAddTextClick,
                 onAddSticker = onAddStickerClick,
+                onTransitions = onOpenTransitionsDock,
                 onTrimToggle = onToggleTrimPanel,
                 onSplit = onSplitAtPlayhead,
                 onDuplicate = onDuplicateSelected,
@@ -900,6 +907,7 @@ private fun ScrollablePhase2ToolDock(
     onAddAudio: () -> Unit,
     onAddText: () -> Unit,
     onAddSticker: () -> Unit,
+    onTransitions: () -> Unit,
     onTrimToggle: () -> Unit,
     onSplit: () -> Unit,
     onDuplicate: () -> Unit,
@@ -920,6 +928,7 @@ private fun ScrollablePhase2ToolDock(
         verticalAlignment = Alignment.CenterVertically
     ) {
         TG7DockToolButton(icon = Icons.Rounded.Add, label = "Add Clip", tint = TG7Colors.NeonCyan, active = false, onClick = onAddMedia)
+        TG7DockToolButton(icon = Icons.Rounded.AutoFixHigh, label = "Transitions", tint = TG7Colors.NeonCyan, active = false, onClick = onTransitions)
         TG7DockToolButton(icon = Icons.Rounded.MusicNote, label = "Audio", tint = Color(0xFF22C55E), active = false, onClick = onAddAudio)
         TG7DockToolButton(icon = Icons.Rounded.TextFields, label = "Text", tint = Color(0xFFC084FC), active = false, onClick = onAddText)
         TG7DockToolButton(icon = Icons.Rounded.EmojiEmotions, label = "Sticker", tint = TG7Colors.BloodRed, active = false, onClick = onAddSticker)

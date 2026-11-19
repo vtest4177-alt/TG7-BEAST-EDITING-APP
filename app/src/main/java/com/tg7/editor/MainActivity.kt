@@ -30,6 +30,7 @@ import com.tg7.editor.ui.components.AddStickerSheet
 import com.tg7.editor.ui.components.AddTextSheet
 import com.tg7.editor.ui.components.ExportSheet
 import com.tg7.editor.ui.components.RecentMediaSheet
+import com.tg7.editor.ui.components.TransitionPickerSheet
 import com.tg7.editor.ui.editor.EditorScreen
 import com.tg7.editor.ui.editor.EditorViewModel
 import com.tg7.editor.ui.home.HomeScreen
@@ -92,6 +93,7 @@ class MainActivity : ComponentActivity() {
                 val showImportSheet by viewModel.showImportSheet.collectAsState()
                 val showTextSheet by viewModel.showTextSheet.collectAsState()
                 val showStickerSheet by viewModel.showStickerSheet.collectAsState()
+                val transitionCutIndex by viewModel.transitionCutIndex.collectAsState()
                 val showTrimPanel by viewModel.showTrimPanel.collectAsState()
                 val isFullscreenPreview by viewModel.isFullscreenPreview.collectAsState()
                 val isImporting by viewModel.isImporting.collectAsState()
@@ -227,6 +229,8 @@ class MainActivity : ComponentActivity() {
                         onAddAudioClick = { audioPicker.launch(arrayOf("audio/*")) },
                         onAddTextClick = { viewModel.setTextSheetVisible(true) },
                         onAddStickerClick = { viewModel.setStickerSheetVisible(true) },
+                        onOpenTransitionPicker = { cutIdx -> viewModel.openTransitionPicker(cutIdx) },
+                        onOpenTransitionsDock = { viewModel.openTransitionPicker(null) },
                         onToggleFullscreen = viewModel::toggleFullscreenPreview,
                         onDismissError = {
                             viewModel.playerController.clearError()
@@ -263,6 +267,21 @@ class MainActivity : ComponentActivity() {
                         AddStickerSheet(
                             onSelectSticker = viewModel::addStickerLayer,
                             onDismiss = { viewModel.setStickerSheetVisible(false) }
+                        )
+                    }
+
+                    val activeCutIdx = transitionCutIndex
+                    if (activeCutIdx != null && activeCutIdx in 0 until activeProject.clips.lastIndex) {
+                        val cutClip = activeProject.clips[activeCutIdx]
+                        TransitionPickerSheet(
+                            cutIndex = activeCutIdx,
+                            totalCuts = (activeProject.clips.size - 1).coerceAtLeast(1),
+                            currentTransitionId = cutClip.outTransitionId,
+                            currentDurationMs = cutClip.outTransitionDurationMs,
+                            onApplyTransition = viewModel::applyTransition,
+                            onApplyAllCuts = viewModel::applyTransitionToAll,
+                            onRemoveTransition = viewModel::removeTransition,
+                            onDismiss = viewModel::closeTransitionPicker
                         )
                     }
 

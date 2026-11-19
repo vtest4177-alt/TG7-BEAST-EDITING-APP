@@ -15,6 +15,8 @@ import androidx.room.Relation
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Entity(tableName = "projects")
 data class ProjectEntity(
@@ -46,7 +48,9 @@ data class VideoClipEntity(
     val kind: String,
     val sourceDurationMs: Long,
     val trimStartMs: Long,
-    val trimEndMs: Long
+    val trimEndMs: Long,
+    val outTransitionId: String? = null,
+    val outTransitionDurationMs: Long = 500L
 )
 
 @Entity(
@@ -207,7 +211,7 @@ interface ProjectDao {
         TextLayerEntity::class,
         StickerLayerEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -217,13 +221,24 @@ abstract class AppDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE video_clips ADD COLUMN outTransitionId TEXT")
+                db.execSQL("ALTER TABLE video_clips ADD COLUMN outTransitionDurationMs INTEGER NOT NULL DEFAULT 500")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
                     "tg7_editor_studio.db"
-                ).fallbackToDestructiveMigration().build().also { INSTANCE = it }
+                )
+                    .addMigrations(MIGRATION_1_2)
+                    .fallbackToDestructiveMigration()
+                    .build()
+                    .also { INSTANCE = it }
             }
         }
     }

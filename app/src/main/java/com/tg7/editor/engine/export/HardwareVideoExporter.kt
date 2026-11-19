@@ -32,6 +32,7 @@ import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.ProgressHolder
 import androidx.media3.transformer.Transformer
 import com.google.common.collect.ImmutableList
+import com.tg7.editor.engine.gl.TransitionTimelineEffect
 import com.tg7.editor.model.EditorProject
 import com.tg7.editor.model.ExportResolution
 import com.tg7.editor.model.ExportState
@@ -135,13 +136,25 @@ class HardwareVideoExporter(context: Context) {
                     }
                 }
 
-                val compositionBuilder = Composition.Builder(sequences)
-                if (textureOverlays.isNotEmpty()) {
-                    compositionBuilder.setEffects(
-                        Effects(
-                            emptyList(),
-                            listOf(OverlayEffect(ImmutableList.copyOf(textureOverlays)))
+                val transitionWindows = TransitionTimelineEffect.buildWindows(appContext, project.clips)
+                val compositionEffects = buildList<Effect> {
+                    if (transitionWindows.isNotEmpty()) {
+                        add(
+                            TransitionTimelineEffect(
+                                initialWindows = transitionWindows,
+                                realtimePositionMsProvider = null
+                            )
                         )
+                    }
+                    if (textureOverlays.isNotEmpty()) {
+                        add(OverlayEffect(ImmutableList.copyOf(textureOverlays)))
+                    }
+                }
+
+                val compositionBuilder = Composition.Builder(sequences)
+                if (compositionEffects.isNotEmpty()) {
+                    compositionBuilder.setEffects(
+                        Effects(emptyList(), compositionEffects)
                     )
                 }
                 val composition = compositionBuilder.build()

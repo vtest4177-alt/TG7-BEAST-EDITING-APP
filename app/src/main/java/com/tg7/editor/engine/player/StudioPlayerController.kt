@@ -6,6 +6,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import com.tg7.editor.engine.gl.TransitionTimelineEffect
 import com.tg7.editor.model.AudioClip
 import com.tg7.editor.model.MediaKind
 import com.tg7.editor.model.TimelineClip
@@ -33,6 +34,10 @@ class StudioPlayerController(
     private var clipOffsetsMs: List<Long> = emptyList()
     private var preparedAudioClipId: String? = null
     private var tickerJob: Job? = null
+
+    private val transitionEffect = TransitionTimelineEffect(
+        realtimePositionMsProvider = { _globalPositionMs.value }
+    )
 
     private val _isPlaying = MutableStateFlow(false)
     val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
@@ -73,7 +78,13 @@ class StudioPlayerController(
     }
 
     init {
+        player.setVideoEffects(listOf(transitionEffect))
         player.addListener(listener)
+    }
+
+    fun refreshTransitionEffects(clips: List<TimelineClip>) {
+        currentClips = clips
+        transitionEffect.updateWindows(TransitionTimelineEffect.buildWindows(appContext, clips))
     }
 
     fun clearError() {
@@ -95,6 +106,7 @@ class StudioPlayerController(
             acc += clip.activeDurationMs
         }
         clipOffsetsMs = offsets
+        transitionEffect.updateWindows(TransitionTimelineEffect.buildWindows(appContext, clips))
 
         if (clips.isEmpty()) {
             player.pause()

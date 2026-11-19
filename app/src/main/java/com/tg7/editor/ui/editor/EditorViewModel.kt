@@ -93,6 +93,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private val _showStickerSheet = MutableStateFlow(false)
     val showStickerSheet: StateFlow<Boolean> = _showStickerSheet.asStateFlow()
 
+    private val _transitionCutIndex = MutableStateFlow<Int?>(null)
+    val transitionCutIndex: StateFlow<Int?> = _transitionCutIndex.asStateFlow()
+
     private val _showTrimPanel = MutableStateFlow(false)
     val showTrimPanel: StateFlow<Boolean> = _showTrimPanel.asStateFlow()
 
@@ -237,6 +240,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         _showImportSheet.value = false
         _showTextSheet.value = false
         _showStickerSheet.value = false
+        _transitionCutIndex.value = null
         _isMultiSelectMode.value = false
         _multiSelectedIds.value = emptySet()
         _activeProjectId.value = null
@@ -736,6 +740,73 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setStickerSheetVisible(visible: Boolean) {
         _showStickerSheet.value = visible
+    }
+
+    fun openTransitionPicker(cutIndex: Int? = null) {
+        val proj = activeProject() ?: return
+        if (proj.clips.size < 2) {
+            _bannerMessage.value = "Split a clip or add 2+ clips to apply a cut transition."
+            return
+        }
+        val maxCut = proj.clips.lastIndex - 1
+        val resolvedCut = cutIndex?.coerceIn(0, maxCut) ?: run {
+            val selId = _selection.value?.itemId
+            val selIdx = proj.clips.indexOfFirst { it.id == selId }
+            if (selIdx >= 0) selIdx.coerceIn(0, maxCut) else 0
+        }
+        _transitionCutIndex.value = resolvedCut
+    }
+
+    fun closeTransitionPicker() {
+        _transitionCutIndex.value = null
+    }
+
+    fun applyTransition(cutIndex: Int, transitionId: String, durationMs: Long) {
+        val proj = activeProject() ?: return
+        if (cutIndex !in 0 until proj.clips.lastIndex) return
+        val safeDur = durationMs.coerceIn(200L, 2500L)
+        val updatedClips = proj.clips.mapIndexed { idx, clip ->
+            if (idx == cutIndex) {
+                clip.copy(outTransitionId = transitionId, outTransitionDurationMs = safeDur)
+            } else clip
+        }
+        mutateProject(
+            newProject = proj.copy(clips = updatedClips),
+            rebuildPlayer = false
+        )
+        playerController.refreshTransitionEffects(updatedClips)
+    }
+
+    fun applyTransitionToAll(transitionId: String, durationMs: Long) {
+        val proj = activeProject() ?: return
+        if (proj.clips.size < 2) return
+        val safeDur = durationMs.coerceIn(200L, 2500L)
+        val updatedClips = proj.clips.mapIndexed { idx, clip ->
+            if (idx < proj.clips.lastIndex) {
+                clip.copy(outTransitionId = transitionId, outTransitionDurationMs = safeDur)
+            } else clip
+        }
+        mutateProject(
+            newProject = proj.copy(clips = updatedClips),
+            rebuildPlayer = false
+        )
+        playerController.refreshTransitionEffects(updatedClips)
+        _bannerMessage.value = "Applied transition to all ${proj.clips.size - 1} cuts."
+        _transitionCutIndex.value = null
+    }
+
+    fun removeTransition(cutIndex: Int) {
+        val proj = activeProject() ?: return
+        if (cutIndex !in 0 until proj.clips.lastIndex) return
+        val updatedClips = proj.clips.mapIndexed { idx, clip ->
+            if (idx == cutIndex) clip.copy(outTransitionId = null) else clip
+        }
+        mutateProject(
+            newProject = proj.copy(clips = updatedClips),
+            rebuildPlayer = false
+        )
+        playerController.refreshTransitionEffects(updatedClips)
+        _transitionCutIndex.value = null
     }
 
     fun setExportSheetVisible(visible: Boolean) {

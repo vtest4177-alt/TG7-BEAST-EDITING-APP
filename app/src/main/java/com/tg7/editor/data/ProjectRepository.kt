@@ -53,7 +53,9 @@ class ProjectRepository(context: Context) {
                 kind = c.kind.name,
                 sourceDurationMs = c.sourceDurationMs,
                 trimStartMs = c.trimStartMs,
-                trimEndMs = c.trimEndMs
+                trimEndMs = c.trimEndMs,
+                outTransitionId = c.outTransitionId,
+                outTransitionDurationMs = c.outTransitionDurationMs
             )
         }
         val audioEntities = project.audioClips.map { a ->
@@ -182,7 +184,9 @@ class ProjectRepository(context: Context) {
                     kind = kind,
                     sourceDurationMs = c.sourceDurationMs,
                     trimStartMs = c.trimStartMs,
-                    trimEndMs = c.trimEndMs
+                    trimEndMs = c.trimEndMs,
+                    outTransitionId = c.outTransitionId,
+                    outTransitionDurationMs = c.outTransitionDurationMs
                 )
             },
             audioClips = audioClips.sortedBy { it.startTimeMs }.map { a ->

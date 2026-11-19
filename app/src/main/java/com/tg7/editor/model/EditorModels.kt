@@ -76,6 +76,38 @@ enum class ExportResolution(val label: String, val shortEdgePx: Int, val badge: 
     UHD_4K("4K", 2160, "4K Ultra HD")
 }
 
+enum class TransitionShaderFamily(val wireName: String, val shaderIndex: Int) {
+    FADE("FADE", 0),
+    WIPE("WIPE", 1),
+    SLIDE("SLIDE", 2),
+    ZOOM("ZOOM", 3),
+    GLITCH("GLITCH", 4),
+    CUBE_3D("CUBE_3D", 5),
+    SWIRL_RIPPLE("SWIRL_RIPPLE", 6),
+    RADIAL_PINWHEEL("RADIAL_PINWHEEL", 7),
+    LIGHT_FLASH("LIGHT_FLASH", 8),
+    MOSAIC_GRID("MOSAIC_GRID", 9),
+    BLUR_WHIP("BLUR_WHIP", 10),
+    KALEIDO_SHAPE("KALEIDO_SHAPE", 11);
+
+    companion object {
+        fun fromWire(value: String): TransitionShaderFamily {
+            return entries.firstOrNull { it.wireName == value } ?: FADE
+        }
+    }
+}
+
+data class TransitionSpec(
+    val id: String,
+    val name: String,
+    val category: String,
+    val shaderFamily: TransitionShaderFamily,
+    val mode: Int,
+    val paramA: Float,
+    val paramB: Float,
+    val defaultDurationMs: Long = 500L
+)
+
 data class TimelineClip(
     val id: String = UUID.randomUUID().toString(),
     val uriString: String,
@@ -83,7 +115,9 @@ data class TimelineClip(
     val kind: MediaKind,
     val sourceDurationMs: Long,
     val trimStartMs: Long = 0L,
-    val trimEndMs: Long = sourceDurationMs
+    val trimEndMs: Long = sourceDurationMs,
+    val outTransitionId: String? = null,
+    val outTransitionDurationMs: Long = 500L
 ) {
     val activeDurationMs: Long
         get() = (trimEndMs - trimStartMs).coerceAtLeast(300L)

@@ -1,0 +1,2257 @@
+{
+  "version": 1,
+  "license": "MIT (gl-transitions math)",
+  "count": 225,
+  "transitions": [
+    {
+      "id": "tr_001_fade",
+      "name": "Crossfade",
+      "category": "Fade & Dissolve",
+      "shaderFamily": "FADE",
+      "mode": 0,
+      "paramA": 0.0,
+      "paramB": 0.0,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_002_fade",
+      "name": "Fade Black",
+      "category": "Fade & Dissolve",
+      "shaderFamily": "FADE",
+      "mode": 1,
+      "paramA": 0.0,
+      "paramB": 0.0,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_003_fade",
+      "name": "Fade White",
+      "category": "Fade & Dissolve",
+      "shaderFamily": "FADE",
+      "mode": 2,
+      "paramA": 1.0,
+      "paramB": 0.0,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_004_fade",
+      "name": "Dip Neon Cyan",
+      "category": "Fade & Dissolve",
+      "shaderFamily": "FADE",
+      "mode": 3,
+      "paramA": 0.0,
+      "paramB": 0.94,
+      "defaultDurationMs": 1000
+    },
+    {
+      "id": "tr_005_fade",
+      "name": "Dip Blood Red",
+      "category": "Fade & Dissolve",
+      "shaderFamily": "FADE",
+      "mode": 3,
+      "paramA": 1.0,
+      "paramB": 0.06,
+      "defaultDurationMs": 190
+    },
+    {
+      "id": "tr_006_fade",
+      "name": "Dream Dissolve",
+      "category": "Fade & Dissolve",
+      "shaderFamily": "FADE",
+      "mode": 4,
+      "paramA": 0.6,
+      "paramB": 0.4,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_007_fade",
+      "name": "Burn Fade",
+      "category": "Fade & Dissolve",
+      "shaderFamily": "FADE",
+      "mode": 5,
+      "paramA": 0.8,
+      "paramB": 0.2,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_008_fade",
+      "name": "Luma Dark Cut",
+      "category": "Fade & Dissolve",
+      "shaderFamily": "FADE",
+      "mode": 6,
+      "paramA": 0.2,
+      "paramB": 0.8,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_009_fade",
+      "name": "Luma Bright Cut",
+      "category": "Fade & Dissolve",
+      "shaderFamily": "FADE",
+      "mode": 6,
+      "paramA": 0.8,
+      "paramB": 0.2,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_010_fade",
+      "name": "Smooth Mist",
+      "category": "Fade & Dissolve",
+      "shaderFamily": "FADE",
+      "mode": 4,
+      "paramA": 0.9,
+      "paramB": 0.7,
+      "defaultDurationMs": 600
+    },
+    {
+      "id": "tr_011_fade",
+      "name": "Contrast Dip",
+      "category": "Fade & Dissolve",
+      "shaderFamily": "FADE",
+      "mode": 7,
+      "paramA": 1.4,
+      "paramB": 0.0,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_012_fade",
+      "name": "Exposure Flash",
+      "category": "Fade & Dissolve",
+      "shaderFamily": "FADE",
+      "mode": 2,
+      "paramA": 1.5,
+      "paramB": 0.5,
+      "defaultDurationMs": 350
+    },
+    {
+      "id": "tr_013_fade",
+      "name": "Soft Vignette",
+      "category": "Fade & Dissolve",
+      "shaderFamily": "FADE",
+      "mode": 8,
+      "paramA": 0.7,
+      "paramB": 0.3,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_014_fade",
+      "name": "Film Burn Warm",
+      "category": "Fade & Dissolve",
+      "shaderFamily": "FADE",
+      "mode": 5,
+      "paramA": 1.0,
+      "paramB": 0.4,
+      "defaultDurationMs": 550
+    },
+    {
+      "id": "tr_015_fade",
+      "name": "Warm Sepia Fade",
+      "category": "Fade & Dissolve",
+      "shaderFamily": "FADE",
+      "mode": 1,
+      "paramA": 0.4,
+      "paramB": 0.2,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_016_fade",
+      "name": "Cold Ice Dissolve",
+      "category": "Fade & Dissolve",
+      "shaderFamily": "FADE",
+      "mode": 3,
+      "paramA": 0.2,
+      "paramB": 0.7,
+      "defaultDurationMs": 900
+    },
+    {
+      "id": "tr_017_fade",
+      "name": "Double Exposure",
+      "category": "Fade & Dissolve",
+      "shaderFamily": "FADE",
+      "mode": 0,
+      "paramA": 0.5,
+      "paramB": 0.8,
+      "defaultDurationMs": 700
+    },
+    {
+      "id": "tr_018_fade",
+      "name": "Velvet Blackout",
+      "category": "Fade & Dissolve",
+      "shaderFamily": "FADE",
+      "mode": 1,
+      "paramA": 0.85,
+      "paramB": 0.0,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_019_fade",
+      "name": "Silver Halide",
+      "category": "Fade & Dissolve",
+      "shaderFamily": "FADE",
+      "mode": 2,
+      "paramA": 0.75,
+      "paramB": 0.3,
+      "defaultDurationMs": 400
+    },
+    {
+      "id": "tr_020_wipe",
+      "name": "Wipe Right",
+      "category": "Wipe & Linear",
+      "shaderFamily": "WIPE",
+      "mode": 0,
+      "paramA": 1.0,
+      "paramB": 0.0,
+      "defaultDurationMs": 50
+    },
+    {
+      "id": "tr_021_wipe",
+      "name": "Wipe Left",
+      "category": "Wipe & Linear",
+      "shaderFamily": "WIPE",
+      "mode": 0,
+      "paramA": -1.0,
+      "paramB": 0.0,
+      "defaultDurationMs": 50
+    },
+    {
+      "id": "tr_022_wipe",
+      "name": "Wipe Up",
+      "category": "Wipe & Linear",
+      "shaderFamily": "WIPE",
+      "mode": 0,
+      "paramA": 0.0,
+      "paramB": 1.0,
+      "defaultDurationMs": 50
+    },
+    {
+      "id": "tr_023_wipe",
+      "name": "Wipe Down",
+      "category": "Wipe & Linear",
+      "shaderFamily": "WIPE",
+      "mode": 0,
+      "paramA": 0.0,
+      "paramB": -1.0,
+      "defaultDurationMs": 50
+    },
+    {
+      "id": "tr_024_wipe",
+      "name": "Diagonal Wipe NE",
+      "category": "Wipe & Linear",
+      "shaderFamily": "WIPE",
+      "mode": 0,
+      "paramA": 1.0,
+      "paramB": 1.0,
+      "defaultDurationMs": 80
+    },
+    {
+      "id": "tr_025_wipe",
+      "name": "Diagonal Wipe NW",
+      "category": "Wipe & Linear",
+      "shaderFamily": "WIPE",
+      "mode": 0,
+      "paramA": -1.0,
+      "paramB": 1.0,
+      "defaultDurationMs": 80
+    },
+    {
+      "id": "tr_026_wipe",
+      "name": "Diagonal Wipe SE",
+      "category": "Wipe & Linear",
+      "shaderFamily": "WIPE",
+      "mode": 0,
+      "paramA": 1.0,
+      "paramB": -1.0,
+      "defaultDurationMs": 80
+    },
+    {
+      "id": "tr_027_wipe",
+      "name": "Diagonal Wipe SW",
+      "category": "Wipe & Linear",
+      "shaderFamily": "WIPE",
+      "mode": 0,
+      "paramA": -1.0,
+      "paramB": -1.0,
+      "defaultDurationMs": 80
+    },
+    {
+      "id": "tr_028_wipe",
+      "name": "Soft Feather Right",
+      "category": "Wipe & Linear",
+      "shaderFamily": "WIPE",
+      "mode": 0,
+      "paramA": 1.0,
+      "paramB": 0.0,
+      "defaultDurationMs": 350
+    },
+    {
+      "id": "tr_029_wipe",
+      "name": "Soft Feather Left",
+      "category": "Wipe & Linear",
+      "shaderFamily": "WIPE",
+      "mode": 0,
+      "paramA": -1.0,
+      "paramB": 0.0,
+      "defaultDurationMs": 350
+    },
+    {
+      "id": "tr_030_wipe",
+      "name": "Barn Door Horizontal",
+      "category": "Wipe & Linear",
+      "shaderFamily": "WIPE",
+      "mode": 1,
+      "paramA": 1.0,
+      "paramB": 0.0,
+      "defaultDurationMs": 40
+    },
+    {
+      "id": "tr_031_wipe",
+      "name": "Barn Door Vertical",
+      "category": "Wipe & Linear",
+      "shaderFamily": "WIPE",
+      "mode": 1,
+      "paramA": 0.0,
+      "paramB": 1.0,
+      "defaultDurationMs": 40
+    },
+    {
+      "id": "tr_032_wipe",
+      "name": "Split Close H",
+      "category": "Wipe & Linear",
+      "shaderFamily": "WIPE",
+      "mode": 1,
+      "paramA": -1.0,
+      "paramB": 0.0,
+      "defaultDurationMs": 40
+    },
+    {
+      "id": "tr_033_wipe",
+      "name": "Split Close V",
+      "category": "Wipe & Linear",
+      "shaderFamily": "WIPE",
+      "mode": 1,
+      "paramA": 0.0,
+      "paramB": -1.0,
+      "defaultDurationMs": 40
+    },
+    {
+      "id": "tr_034_wipe",
+      "name": "Venetian Blinds 6",
+      "category": "Wipe & Linear",
+      "shaderFamily": "WIPE",
+      "mode": 2,
+      "paramA": 6.0,
+      "paramB": 0.0,
+      "defaultDurationMs": 100
+    },
+    {
+      "id": "tr_035_wipe",
+      "name": "Venetian Blinds 12",
+      "category": "Wipe & Linear",
+      "shaderFamily": "WIPE",
+      "mode": 2,
+      "paramA": 12.0,
+      "paramB": 0.0,
+      "defaultDurationMs": 100
+    },
+    {
+      "id": "tr_036_wipe",
+      "name": "Vertical Blinds 8",
+      "category": "Wipe & Linear",
+      "shaderFamily": "WIPE",
+      "mode": 2,
+      "paramA": 8.0,
+      "paramB": 1.0,
+      "defaultDurationMs": 100
+    },
+    {
+      "id": "tr_037_wipe",
+      "name": "Vertical Blinds 16",
+      "category": "Wipe & Linear",
+      "shaderFamily": "WIPE",
+      "mode": 2,
+      "paramA": 16.0,
+      "paramB": 1.0,
+      "defaultDurationMs": 100
+    },
+    {
+      "id": "tr_038_wipe",
+      "name": "Linear Slice Edge",
+      "category": "Wipe & Linear",
+      "shaderFamily": "WIPE",
+      "mode": 0,
+      "paramA": 1.0,
+      "paramB": 0.25,
+      "defaultDurationMs": 10
+    },
+    {
+      "id": "tr_039_wipe",
+      "name": "Dual Curtain",
+      "category": "Wipe & Linear",
+      "shaderFamily": "WIPE",
+      "mode": 1,
+      "paramA": 1.0,
+      "paramB": 0.5,
+      "defaultDurationMs": 150
+    },
+    {
+      "id": "tr_040_slide",
+      "name": "Slide Left",
+      "category": "Slide & Push",
+      "shaderFamily": "SLIDE",
+      "mode": 0,
+      "paramA": -1.0,
+      "paramB": 0.0,
+      "defaultDurationMs": 0
+    },
+    {
+      "id": "tr_041_slide",
+      "name": "Slide Right",
+      "category": "Slide & Push",
+      "shaderFamily": "SLIDE",
+      "mode": 0,
+      "paramA": 1.0,
+      "paramB": 0.0,
+      "defaultDurationMs": 0
+    },
+    {
+      "id": "tr_042_slide",
+      "name": "Slide Up",
+      "category": "Slide & Push",
+      "shaderFamily": "SLIDE",
+      "mode": 0,
+      "paramA": 0.0,
+      "paramB": 1.0,
+      "defaultDurationMs": 0
+    },
+    {
+      "id": "tr_043_slide",
+      "name": "Slide Down",
+      "category": "Slide & Push",
+      "shaderFamily": "SLIDE",
+      "mode": 0,
+      "paramA": 0.0,
+      "paramB": -1.0,
+      "defaultDurationMs": 0
+    },
+    {
+      "id": "tr_044_slide",
+      "name": "Push Left",
+      "category": "Slide & Push",
+      "shaderFamily": "SLIDE",
+      "mode": 1,
+      "paramA": -1.0,
+      "paramB": 0.0,
+      "defaultDurationMs": 0
+    },
+    {
+      "id": "tr_045_slide",
+      "name": "Push Right",
+      "category": "Slide & Push",
+      "shaderFamily": "SLIDE",
+      "mode": 1,
+      "paramA": 1.0,
+      "paramB": 0.0,
+      "defaultDurationMs": 0
+    },
+    {
+      "id": "tr_046_slide",
+      "name": "Push Up",
+      "category": "Slide & Push",
+      "shaderFamily": "SLIDE",
+      "mode": 1,
+      "paramA": 0.0,
+      "paramB": 1.0,
+      "defaultDurationMs": 0
+    },
+    {
+      "id": "tr_047_slide",
+      "name": "Push Down",
+      "category": "Slide & Push",
+      "shaderFamily": "SLIDE",
+      "mode": 1,
+      "paramA": 0.0,
+      "paramB": -1.0,
+      "defaultDurationMs": 0
+    },
+    {
+      "id": "tr_048_slide",
+      "name": "Elastic Slide L",
+      "category": "Slide & Push",
+      "shaderFamily": "SLIDE",
+      "mode": 2,
+      "paramA": -1.0,
+      "paramB": 0.0,
+      "defaultDurationMs": 400
+    },
+    {
+      "id": "tr_049_slide",
+      "name": "Elastic Slide R",
+      "category": "Slide & Push",
+      "shaderFamily": "SLIDE",
+      "mode": 2,
+      "paramA": 1.0,
+      "paramB": 0.0,
+      "defaultDurationMs": 400
+    },
+    {
+      "id": "tr_050_slide",
+      "name": "Elastic Slide Up",
+      "category": "Slide & Push",
+      "shaderFamily": "SLIDE",
+      "mode": 2,
+      "paramA": 0.0,
+      "paramB": 1.0,
+      "defaultDurationMs": 400
+    },
+    {
+      "id": "tr_051_slide",
+      "name": "Elastic Slide Down",
+      "category": "Slide & Push",
+      "shaderFamily": "SLIDE",
+      "mode": 2,
+      "paramA": 0.0,
+      "paramB": -1.0,
+      "defaultDurationMs": 400
+    },
+    {
+      "id": "tr_052_slide",
+      "name": "Whip Pan Left",
+      "category": "Slide & Push",
+      "shaderFamily": "SLIDE",
+      "mode": 3,
+      "paramA": -1.0,
+      "paramB": 0.0,
+      "defaultDurationMs": 800
+    },
+    {
+      "id": "tr_053_slide",
+      "name": "Whip Pan Right",
+      "category": "Slide & Push",
+      "shaderFamily": "SLIDE",
+      "mode": 3,
+      "paramA": 1.0,
+      "paramB": 0.0,
+      "defaultDurationMs": 800
+    },
+    {
+      "id": "tr_054_slide",
+      "name": "Whip Pan Up",
+      "category": "Slide & Push",
+      "shaderFamily": "SLIDE",
+      "mode": 3,
+      "paramA": 0.0,
+      "paramB": 1.0,
+      "defaultDurationMs": 800
+    },
+    {
+      "id": "tr_055_slide",
+      "name": "Whip Pan Down",
+      "category": "Slide & Push",
+      "shaderFamily": "SLIDE",
+      "mode": 3,
+      "paramA": 0.0,
+      "paramB": -1.0,
+      "defaultDurationMs": 800
+    },
+    {
+      "id": "tr_056_slide",
+      "name": "Diagonal Slide TL",
+      "category": "Slide & Push",
+      "shaderFamily": "SLIDE",
+      "mode": 0,
+      "paramA": 0.7,
+      "paramB": 0.7,
+      "defaultDurationMs": 0
+    },
+    {
+      "id": "tr_057_slide",
+      "name": "Diagonal Slide BR",
+      "category": "Slide & Push",
+      "shaderFamily": "SLIDE",
+      "mode": 0,
+      "paramA": -0.7,
+      "paramB": -0.7,
+      "defaultDurationMs": 0
+    },
+    {
+      "id": "tr_058_slide",
+      "name": "Parallax Cover",
+      "category": "Slide & Push",
+      "shaderFamily": "SLIDE",
+      "mode": 1,
+      "paramA": -1.0,
+      "paramB": 0.0,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_059_zoom",
+      "name": "Zoom In",
+      "category": "Zoom & Warp",
+      "shaderFamily": "ZOOM",
+      "mode": 0,
+      "paramA": 1.8,
+      "paramB": 0.0,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_060_zoom",
+      "name": "Zoom Out",
+      "category": "Zoom & Warp",
+      "shaderFamily": "ZOOM",
+      "mode": 1,
+      "paramA": 0.35,
+      "paramB": 0.0,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_061_zoom",
+      "name": "Cross Zoom",
+      "category": "Zoom & Warp",
+      "shaderFamily": "ZOOM",
+      "mode": 2,
+      "paramA": 2.2,
+      "paramB": 0.4,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_062_zoom",
+      "name": "Hyper Zoom",
+      "category": "Zoom & Warp",
+      "shaderFamily": "ZOOM",
+      "mode": 2,
+      "paramA": 3.6,
+      "paramB": 0.8,
+      "defaultDurationMs": 400
+    },
+    {
+      "id": "tr_063_zoom",
+      "name": "Snap Zoom In",
+      "category": "Zoom & Warp",
+      "shaderFamily": "ZOOM",
+      "mode": 0,
+      "paramA": 2.5,
+      "paramB": 0.2,
+      "defaultDurationMs": 300
+    },
+    {
+      "id": "tr_064_zoom",
+      "name": "Snap Zoom Out",
+      "category": "Zoom & Warp",
+      "shaderFamily": "ZOOM",
+      "mode": 1,
+      "paramA": 0.2,
+      "paramB": 0.2,
+      "defaultDurationMs": 300
+    },
+    {
+      "id": "tr_065_zoom",
+      "name": "Fisheye Pop",
+      "category": "Zoom & Warp",
+      "shaderFamily": "ZOOM",
+      "mode": 3,
+      "paramA": 1.4,
+      "paramB": 0.5,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_066_zoom",
+      "name": "Barrel Warp",
+      "category": "Zoom & Warp",
+      "shaderFamily": "ZOOM",
+      "mode": 3,
+      "paramA": 2.0,
+      "paramB": 0.8,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_067_zoom",
+      "name": "Pincushion Pull",
+      "category": "Zoom & Warp",
+      "shaderFamily": "ZOOM",
+      "mode": 3,
+      "paramA": -1.5,
+      "paramB": 0.5,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_068_zoom",
+      "name": "Vortex Zoom",
+      "category": "Zoom & Warp",
+      "shaderFamily": "ZOOM",
+      "mode": 4,
+      "paramA": 2.4,
+      "paramB": 1.5,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_069_zoom",
+      "name": "Tunnel Pull",
+      "category": "Zoom & Warp",
+      "shaderFamily": "ZOOM",
+      "mode": 4,
+      "paramA": -2.0,
+      "paramB": 1.2,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_070_zoom",
+      "name": "Bounce Zoom",
+      "category": "Zoom & Warp",
+      "shaderFamily": "ZOOM",
+      "mode": 0,
+      "paramA": 1.6,
+      "paramB": 0.9,
+      "defaultDurationMs": 450
+    },
+    {
+      "id": "tr_071_zoom",
+      "name": "Macro Punch",
+      "category": "Zoom & Warp",
+      "shaderFamily": "ZOOM",
+      "mode": 2,
+      "paramA": 4.0,
+      "paramB": 0.6,
+      "defaultDurationMs": 350
+    },
+    {
+      "id": "tr_072_zoom",
+      "name": "Micro Shrink",
+      "category": "Zoom & Warp",
+      "shaderFamily": "ZOOM",
+      "mode": 1,
+      "paramA": 0.1,
+      "paramB": 0.6,
+      "defaultDurationMs": 400
+    },
+    {
+      "id": "tr_073_zoom",
+      "name": "Center Warp Fold",
+      "category": "Zoom & Warp",
+      "shaderFamily": "ZOOM",
+      "mode": 3,
+      "paramA": 1.8,
+      "paramB": -0.5,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_074_zoom",
+      "name": "Corner Zoom TL",
+      "category": "Zoom & Warp",
+      "shaderFamily": "ZOOM",
+      "mode": 0,
+      "paramA": 2.0,
+      "paramB": -0.6,
+      "defaultDurationMs": -600
+    },
+    {
+      "id": "tr_075_zoom",
+      "name": "Corner Zoom BR",
+      "category": "Zoom & Warp",
+      "shaderFamily": "ZOOM",
+      "mode": 0,
+      "paramA": 2.0,
+      "paramB": 0.6,
+      "defaultDurationMs": 600
+    },
+    {
+      "id": "tr_076_zoom",
+      "name": "Dolly Rush",
+      "category": "Zoom & Warp",
+      "shaderFamily": "ZOOM",
+      "mode": 2,
+      "paramA": 2.8,
+      "paramB": 0.2,
+      "defaultDurationMs": 450
+    },
+    {
+      "id": "tr_077_glitch",
+      "name": "Glitch Memories",
+      "category": "Glitch & Digital",
+      "shaderFamily": "GLITCH",
+      "mode": 0,
+      "paramA": 0.8,
+      "paramB": 12.0,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_078_glitch",
+      "name": "RGB Split Cut",
+      "category": "Glitch & Digital",
+      "shaderFamily": "GLITCH",
+      "mode": 1,
+      "paramA": 0.08,
+      "paramB": 0.0,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_079_glitch",
+      "name": "VHS Tracking Tear",
+      "category": "Glitch & Digital",
+      "shaderFamily": "GLITCH",
+      "mode": 2,
+      "paramA": 18.0,
+      "paramB": 0.12,
+      "defaultDurationMs": 600
+    },
+    {
+      "id": "tr_080_glitch",
+      "name": "Chromatic Slice",
+      "category": "Glitch & Digital",
+      "shaderFamily": "GLITCH",
+      "mode": 1,
+      "paramA": 0.14,
+      "paramB": 0.5,
+      "defaultDurationMs": 400
+    },
+    {
+      "id": "tr_081_glitch",
+      "name": "Cyber Scanline",
+      "category": "Glitch & Digital",
+      "shaderFamily": "GLITCH",
+      "mode": 3,
+      "paramA": 45.0,
+      "paramB": 0.1,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_082_glitch",
+      "name": "Datamosh Drift",
+      "category": "Glitch & Digital",
+      "shaderFamily": "GLITCH",
+      "mode": 0,
+      "paramA": 1.4,
+      "paramB": 6.0,
+      "defaultDurationMs": 600
+    },
+    {
+      "id": "tr_083_glitch",
+      "name": "Signal Static Pop",
+      "category": "Glitch & Digital",
+      "shaderFamily": "GLITCH",
+      "mode": 4,
+      "paramA": 0.9,
+      "paramB": 25.0,
+      "defaultDurationMs": 400
+    },
+    {
+      "id": "tr_084_glitch",
+      "name": "CRT Roll Glitch",
+      "category": "Glitch & Digital",
+      "shaderFamily": "GLITCH",
+      "mode": 2,
+      "paramA": 8.0,
+      "paramB": 0.25,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_085_glitch",
+      "name": "Matrix Tear",
+      "category": "Glitch & Digital",
+      "shaderFamily": "GLITCH",
+      "mode": 3,
+      "paramA": 24.0,
+      "paramB": 0.22,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_086_glitch",
+      "name": "Jitter RGB Blast",
+      "category": "Glitch & Digital",
+      "shaderFamily": "GLITCH",
+      "mode": 1,
+      "paramA": 0.2,
+      "paramB": 1.0,
+      "defaultDurationMs": 350
+    },
+    {
+      "id": "tr_087_glitch",
+      "name": "Digital Corrupt",
+      "category": "Glitch & Digital",
+      "shaderFamily": "GLITCH",
+      "mode": 0,
+      "paramA": 1.8,
+      "paramB": 22.0,
+      "defaultDurationMs": 450
+    },
+    {
+      "id": "tr_088_glitch",
+      "name": "Horizontal Tears",
+      "category": "Glitch & Digital",
+      "shaderFamily": "GLITCH",
+      "mode": 2,
+      "paramA": 32.0,
+      "paramB": 0.18,
+      "defaultDurationMs": 450
+    },
+    {
+      "id": "tr_089_glitch",
+      "name": "Vertical Slice Bug",
+      "category": "Glitch & Digital",
+      "shaderFamily": "GLITCH",
+      "mode": 3,
+      "paramA": 16.0,
+      "paramB": 0.3,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_090_glitch",
+      "name": "Static Snow Cut",
+      "category": "Glitch & Digital",
+      "shaderFamily": "GLITCH",
+      "mode": 4,
+      "paramA": 1.3,
+      "paramB": 60.0,
+      "defaultDurationMs": 400
+    },
+    {
+      "id": "tr_091_glitch",
+      "name": "Neon Aberration",
+      "category": "Glitch & Digital",
+      "shaderFamily": "GLITCH",
+      "mode": 1,
+      "paramA": 0.11,
+      "paramB": 0.8,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_092_glitch",
+      "name": "Analog Distortion",
+      "category": "Glitch & Digital",
+      "shaderFamily": "GLITCH",
+      "mode": 2,
+      "paramA": 12.0,
+      "paramB": 0.15,
+      "defaultDurationMs": 550
+    },
+    {
+      "id": "tr_093_glitch",
+      "name": "Signal Drop",
+      "category": "Glitch & Digital",
+      "shaderFamily": "GLITCH",
+      "mode": 4,
+      "paramA": 0.6,
+      "paramB": 15.0,
+      "defaultDurationMs": 450
+    },
+    {
+      "id": "tr_094_glitch",
+      "name": "Glitch Pulse",
+      "category": "Glitch & Digital",
+      "shaderFamily": "GLITCH",
+      "mode": 0,
+      "paramA": 1.1,
+      "paramB": 30.0,
+      "defaultDurationMs": 400
+    },
+    {
+      "id": "tr_095_glitch",
+      "name": "Chroma Burn",
+      "category": "Glitch & Digital",
+      "shaderFamily": "GLITCH",
+      "mode": 1,
+      "paramA": 0.18,
+      "paramB": 0.3,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_096_cube_3d",
+      "name": "Cube Left",
+      "category": "3D Spin & Cube",
+      "shaderFamily": "CUBE_3D",
+      "mode": 0,
+      "paramA": 0.7,
+      "paramB": 0.0,
+      "defaultDurationMs": 650
+    },
+    {
+      "id": "tr_097_cube_3d",
+      "name": "Cube Right",
+      "category": "3D Spin & Cube",
+      "shaderFamily": "CUBE_3D",
+      "mode": 0,
+      "paramA": -0.7,
+      "paramB": 0.0,
+      "defaultDurationMs": 650
+    },
+    {
+      "id": "tr_098_cube_3d",
+      "name": "Cube Up",
+      "category": "3D Spin & Cube",
+      "shaderFamily": "CUBE_3D",
+      "mode": 0,
+      "paramA": 0.0,
+      "paramB": 0.7,
+      "defaultDurationMs": 650
+    },
+    {
+      "id": "tr_099_cube_3d",
+      "name": "Cube Down",
+      "category": "3D Spin & Cube",
+      "shaderFamily": "CUBE_3D",
+      "mode": 0,
+      "paramA": 0.0,
+      "paramB": -0.7,
+      "defaultDurationMs": 650
+    },
+    {
+      "id": "tr_100_cube_3d",
+      "name": "Flip Card H",
+      "category": "3D Spin & Cube",
+      "shaderFamily": "CUBE_3D",
+      "mode": 1,
+      "paramA": 1.0,
+      "paramB": 0.0,
+      "defaultDurationMs": 550
+    },
+    {
+      "id": "tr_101_cube_3d",
+      "name": "Flip Card V",
+      "category": "3D Spin & Cube",
+      "shaderFamily": "CUBE_3D",
+      "mode": 1,
+      "paramA": 0.0,
+      "paramB": 1.0,
+      "defaultDurationMs": 550
+    },
+    {
+      "id": "tr_102_cube_3d",
+      "name": "Doorway Open",
+      "category": "3D Spin & Cube",
+      "shaderFamily": "CUBE_3D",
+      "mode": 2,
+      "paramA": 0.6,
+      "paramB": 0.4,
+      "defaultDurationMs": 650
+    },
+    {
+      "id": "tr_103_cube_3d",
+      "name": "Doorway Close",
+      "category": "3D Spin & Cube",
+      "shaderFamily": "CUBE_3D",
+      "mode": 2,
+      "paramA": -0.6,
+      "paramB": 0.4,
+      "defaultDurationMs": 650
+    },
+    {
+      "id": "tr_104_cube_3d",
+      "name": "Page Curl Left",
+      "category": "3D Spin & Cube",
+      "shaderFamily": "CUBE_3D",
+      "mode": 3,
+      "paramA": 1.0,
+      "paramB": 0.2,
+      "defaultDurationMs": 700
+    },
+    {
+      "id": "tr_105_cube_3d",
+      "name": "Page Curl Right",
+      "category": "3D Spin & Cube",
+      "shaderFamily": "CUBE_3D",
+      "mode": 3,
+      "paramA": -1.0,
+      "paramB": 0.2,
+      "defaultDurationMs": 700
+    },
+    {
+      "id": "tr_106_cube_3d",
+      "name": "Window Slice",
+      "category": "3D Spin & Cube",
+      "shaderFamily": "CUBE_3D",
+      "mode": 4,
+      "paramA": 10.0,
+      "paramB": 0.5,
+      "defaultDurationMs": 600
+    },
+    {
+      "id": "tr_107_cube_3d",
+      "name": "Rotate CW",
+      "category": "3D Spin & Cube",
+      "shaderFamily": "CUBE_3D",
+      "mode": 5,
+      "paramA": 1.0,
+      "paramB": 1.5,
+      "defaultDurationMs": 550
+    },
+    {
+      "id": "tr_108_cube_3d",
+      "name": "Rotate CCW",
+      "category": "3D Spin & Cube",
+      "shaderFamily": "CUBE_3D",
+      "mode": 5,
+      "paramA": -1.0,
+      "paramB": 1.5,
+      "defaultDurationMs": 550
+    },
+    {
+      "id": "tr_109_cube_3d",
+      "name": "Double Spin 360",
+      "category": "3D Spin & Cube",
+      "shaderFamily": "CUBE_3D",
+      "mode": 5,
+      "paramA": 2.0,
+      "paramB": 1.8,
+      "defaultDurationMs": 650
+    },
+    {
+      "id": "tr_110_cube_3d",
+      "name": "Tilt Fold H",
+      "category": "3D Spin & Cube",
+      "shaderFamily": "CUBE_3D",
+      "mode": 1,
+      "paramA": 1.5,
+      "paramB": 0.3,
+      "defaultDurationMs": 600
+    },
+    {
+      "id": "tr_111_cube_3d",
+      "name": "Tilt Fold V",
+      "category": "3D Spin & Cube",
+      "shaderFamily": "CUBE_3D",
+      "mode": 1,
+      "paramA": 0.3,
+      "paramB": 1.5,
+      "defaultDurationMs": 600
+    },
+    {
+      "id": "tr_112_cube_3d",
+      "name": "Perspective Slam",
+      "category": "3D Spin & Cube",
+      "shaderFamily": "CUBE_3D",
+      "mode": 0,
+      "paramA": 1.1,
+      "paramB": 0.2,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_113_cube_3d",
+      "name": "Curtain Split 3D",
+      "category": "3D Spin & Cube",
+      "shaderFamily": "CUBE_3D",
+      "mode": 2,
+      "paramA": 0.9,
+      "paramB": 0.7,
+      "defaultDurationMs": 650
+    },
+    {
+      "id": "tr_114_swirl_ripple",
+      "name": "Water Ripple",
+      "category": "Ripple & Liquid",
+      "shaderFamily": "SWIRL_RIPPLE",
+      "mode": 0,
+      "paramA": 24.0,
+      "paramB": 0.06,
+      "defaultDurationMs": 650
+    },
+    {
+      "id": "tr_115_swirl_ripple",
+      "name": "Shockwave Ring",
+      "category": "Ripple & Liquid",
+      "shaderFamily": "SWIRL_RIPPLE",
+      "mode": 1,
+      "paramA": 18.0,
+      "paramB": 0.12,
+      "defaultDurationMs": 550
+    },
+    {
+      "id": "tr_116_swirl_ripple",
+      "name": "Liquid Swirl CW",
+      "category": "Ripple & Liquid",
+      "shaderFamily": "SWIRL_RIPPLE",
+      "mode": 2,
+      "paramA": 5.0,
+      "paramB": 0.8,
+      "defaultDurationMs": 650
+    },
+    {
+      "id": "tr_117_swirl_ripple",
+      "name": "Liquid Swirl CCW",
+      "category": "Ripple & Liquid",
+      "shaderFamily": "SWIRL_RIPPLE",
+      "mode": 2,
+      "paramA": -5.0,
+      "paramB": 0.8,
+      "defaultDurationMs": 650
+    },
+    {
+      "id": "tr_118_swirl_ripple",
+      "name": "Ocean Wave H",
+      "category": "Ripple & Liquid",
+      "shaderFamily": "SWIRL_RIPPLE",
+      "mode": 3,
+      "paramA": 14.0,
+      "paramB": 0.08,
+      "defaultDurationMs": 650
+    },
+    {
+      "id": "tr_119_swirl_ripple",
+      "name": "Ocean Wave V",
+      "category": "Ripple & Liquid",
+      "shaderFamily": "SWIRL_RIPPLE",
+      "mode": 3,
+      "paramA": 14.0,
+      "paramB": -0.08,
+      "defaultDurationMs": 650
+    },
+    {
+      "id": "tr_120_swirl_ripple",
+      "name": "Droplet Expand",
+      "category": "Ripple & Liquid",
+      "shaderFamily": "SWIRL_RIPPLE",
+      "mode": 0,
+      "paramA": 36.0,
+      "paramB": 0.09,
+      "defaultDurationMs": 600
+    },
+    {
+      "id": "tr_121_swirl_ripple",
+      "name": "Jelly Wobble",
+      "category": "Ripple & Liquid",
+      "shaderFamily": "SWIRL_RIPPLE",
+      "mode": 3,
+      "paramA": 8.0,
+      "paramB": 0.14,
+      "defaultDurationMs": 550
+    },
+    {
+      "id": "tr_122_swirl_ripple",
+      "name": "Fluid Melt",
+      "category": "Ripple & Liquid",
+      "shaderFamily": "SWIRL_RIPPLE",
+      "mode": 2,
+      "paramA": 3.0,
+      "paramB": 1.2,
+      "defaultDurationMs": 700
+    },
+    {
+      "id": "tr_123_swirl_ripple",
+      "name": "Plasma Twist",
+      "category": "Ripple & Liquid",
+      "shaderFamily": "SWIRL_RIPPLE",
+      "mode": 2,
+      "paramA": 8.5,
+      "paramB": 0.6,
+      "defaultDurationMs": 600
+    },
+    {
+      "id": "tr_124_swirl_ripple",
+      "name": "Heat Haze",
+      "category": "Ripple & Liquid",
+      "shaderFamily": "SWIRL_RIPPLE",
+      "mode": 3,
+      "paramA": 40.0,
+      "paramB": 0.04,
+      "defaultDurationMs": 600
+    },
+    {
+      "id": "tr_125_swirl_ripple",
+      "name": "Pulse Ring Double",
+      "category": "Ripple & Liquid",
+      "shaderFamily": "SWIRL_RIPPLE",
+      "mode": 1,
+      "paramA": 30.0,
+      "paramB": 0.08,
+      "defaultDurationMs": 600
+    },
+    {
+      "id": "tr_126_swirl_ripple",
+      "name": "Deep Whirlpool",
+      "category": "Ripple & Liquid",
+      "shaderFamily": "SWIRL_RIPPLE",
+      "mode": 2,
+      "paramA": 10.0,
+      "paramB": 0.9,
+      "defaultDurationMs": 700
+    },
+    {
+      "id": "tr_127_swirl_ripple",
+      "name": "Calm Pond",
+      "category": "Ripple & Liquid",
+      "shaderFamily": "SWIRL_RIPPLE",
+      "mode": 0,
+      "paramA": 12.0,
+      "paramB": 0.03,
+      "defaultDurationMs": 750
+    },
+    {
+      "id": "tr_128_swirl_ripple",
+      "name": "Acoustic Ripple",
+      "category": "Ripple & Liquid",
+      "shaderFamily": "SWIRL_RIPPLE",
+      "mode": 1,
+      "paramA": 45.0,
+      "paramB": 0.05,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_129_swirl_ripple",
+      "name": "Sine Flow",
+      "category": "Ripple & Liquid",
+      "shaderFamily": "SWIRL_RIPPLE",
+      "mode": 3,
+      "paramA": 22.0,
+      "paramB": 0.1,
+      "defaultDurationMs": 600
+    },
+    {
+      "id": "tr_130_swirl_ripple",
+      "name": "Tidal Surge",
+      "category": "Ripple & Liquid",
+      "shaderFamily": "SWIRL_RIPPLE",
+      "mode": 0,
+      "paramA": 16.0,
+      "paramB": 0.11,
+      "defaultDurationMs": 650
+    },
+    {
+      "id": "tr_131_swirl_ripple",
+      "name": "Spiral Warp",
+      "category": "Ripple & Liquid",
+      "shaderFamily": "SWIRL_RIPPLE",
+      "mode": 2,
+      "paramA": -8.0,
+      "paramB": 0.7,
+      "defaultDurationMs": 600
+    },
+    {
+      "id": "tr_132_radial_pinwheel",
+      "name": "Clock Sweep CW",
+      "category": "Radial & Iris",
+      "shaderFamily": "RADIAL_PINWHEEL",
+      "mode": 0,
+      "paramA": 1.0,
+      "paramB": 0.05,
+      "defaultDurationMs": 600
+    },
+    {
+      "id": "tr_133_radial_pinwheel",
+      "name": "Clock Sweep CCW",
+      "category": "Radial & Iris",
+      "shaderFamily": "RADIAL_PINWHEEL",
+      "mode": 0,
+      "paramA": -1.0,
+      "paramB": 0.05,
+      "defaultDurationMs": 600
+    },
+    {
+      "id": "tr_134_radial_pinwheel",
+      "name": "Circle Open",
+      "category": "Radial & Iris",
+      "shaderFamily": "RADIAL_PINWHEEL",
+      "mode": 1,
+      "paramA": 1.0,
+      "paramB": 0.08,
+      "defaultDurationMs": 550
+    },
+    {
+      "id": "tr_135_radial_pinwheel",
+      "name": "Circle Close",
+      "category": "Radial & Iris",
+      "shaderFamily": "RADIAL_PINWHEEL",
+      "mode": 1,
+      "paramA": -1.0,
+      "paramB": 0.08,
+      "defaultDurationMs": 550
+    },
+    {
+      "id": "tr_136_radial_pinwheel",
+      "name": "Hard Iris Open",
+      "category": "Radial & Iris",
+      "shaderFamily": "RADIAL_PINWHEEL",
+      "mode": 1,
+      "paramA": 1.0,
+      "paramB": 0.01,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_137_radial_pinwheel",
+      "name": "Soft Iris Open",
+      "category": "Radial & Iris",
+      "shaderFamily": "RADIAL_PINWHEEL",
+      "mode": 1,
+      "paramA": 1.0,
+      "paramB": 0.25,
+      "defaultDurationMs": 650
+    },
+    {
+      "id": "tr_138_radial_pinwheel",
+      "name": "Pinwheel 4 Blade",
+      "category": "Radial & Iris",
+      "shaderFamily": "RADIAL_PINWHEEL",
+      "mode": 2,
+      "paramA": 4.0,
+      "paramB": 1.0,
+      "defaultDurationMs": 600
+    },
+    {
+      "id": "tr_139_radial_pinwheel",
+      "name": "Pinwheel 8 Blade",
+      "category": "Radial & Iris",
+      "shaderFamily": "RADIAL_PINWHEEL",
+      "mode": 2,
+      "paramA": 8.0,
+      "paramB": 1.0,
+      "defaultDurationMs": 600
+    },
+    {
+      "id": "tr_140_radial_pinwheel",
+      "name": "Pinwheel 12 Blade",
+      "category": "Radial & Iris",
+      "shaderFamily": "RADIAL_PINWHEEL",
+      "mode": 2,
+      "paramA": 12.0,
+      "paramB": -1.0,
+      "defaultDurationMs": 600
+    },
+    {
+      "id": "tr_141_radial_pinwheel",
+      "name": "Starburst Radial",
+      "category": "Radial & Iris",
+      "shaderFamily": "RADIAL_PINWHEEL",
+      "mode": 3,
+      "paramA": 6.0,
+      "paramB": 0.4,
+      "defaultDurationMs": 550
+    },
+    {
+      "id": "tr_142_radial_pinwheel",
+      "name": "Starburst 10",
+      "category": "Radial & Iris",
+      "shaderFamily": "RADIAL_PINWHEEL",
+      "mode": 3,
+      "paramA": 10.0,
+      "paramB": 0.5,
+      "defaultDurationMs": 550
+    },
+    {
+      "id": "tr_143_radial_pinwheel",
+      "name": "Dual Sweep",
+      "category": "Radial & Iris",
+      "shaderFamily": "RADIAL_PINWHEEL",
+      "mode": 0,
+      "paramA": 2.0,
+      "paramB": 0.08,
+      "defaultDurationMs": 550
+    },
+    {
+      "id": "tr_144_radial_pinwheel",
+      "name": "Quad Sweep",
+      "category": "Radial & Iris",
+      "shaderFamily": "RADIAL_PINWHEEL",
+      "mode": 0,
+      "paramA": 4.0,
+      "paramB": 0.06,
+      "defaultDurationMs": 550
+    },
+    {
+      "id": "tr_145_radial_pinwheel",
+      "name": "Spotlight Focus",
+      "category": "Radial & Iris",
+      "shaderFamily": "RADIAL_PINWHEEL",
+      "mode": 1,
+      "paramA": 1.0,
+      "paramB": 0.35,
+      "defaultDurationMs": 600
+    },
+    {
+      "id": "tr_146_radial_pinwheel",
+      "name": "Vortex Pinwheel",
+      "category": "Radial & Iris",
+      "shaderFamily": "RADIAL_PINWHEEL",
+      "mode": 2,
+      "paramA": 6.0,
+      "paramB": 2.0,
+      "defaultDurationMs": 600
+    },
+    {
+      "id": "tr_147_radial_pinwheel",
+      "name": "Halo Iris",
+      "category": "Radial & Iris",
+      "shaderFamily": "RADIAL_PINWHEEL",
+      "mode": 1,
+      "paramA": -1.0,
+      "paramB": 0.22,
+      "defaultDurationMs": 550
+    },
+    {
+      "id": "tr_148_radial_pinwheel",
+      "name": "Radar Scan",
+      "category": "Radial & Iris",
+      "shaderFamily": "RADIAL_PINWHEEL",
+      "mode": 0,
+      "paramA": 1.0,
+      "paramB": 0.02,
+      "defaultDurationMs": 600
+    },
+    {
+      "id": "tr_149_radial_pinwheel",
+      "name": "Cross Pinwheel",
+      "category": "Radial & Iris",
+      "shaderFamily": "RADIAL_PINWHEEL",
+      "mode": 3,
+      "paramA": 4.0,
+      "paramB": 0.8,
+      "defaultDurationMs": 550
+    },
+    {
+      "id": "tr_150_light_flash",
+      "name": "White Flash",
+      "category": "Light & Flash",
+      "shaderFamily": "LIGHT_FLASH",
+      "mode": 0,
+      "paramA": 1.0,
+      "paramB": 1.0,
+      "defaultDurationMs": 350
+    },
+    {
+      "id": "tr_151_light_flash",
+      "name": "Neon Cyan Flare",
+      "category": "Light & Flash",
+      "shaderFamily": "LIGHT_FLASH",
+      "mode": 1,
+      "paramA": 0.0,
+      "paramB": 0.94,
+      "defaultDurationMs": 400
+    },
+    {
+      "id": "tr_152_light_flash",
+      "name": "Blood Red Strobe",
+      "category": "Light & Flash",
+      "shaderFamily": "LIGHT_FLASH",
+      "mode": 1,
+      "paramA": 1.0,
+      "paramB": 0.06,
+      "defaultDurationMs": 400
+    },
+    {
+      "id": "tr_153_light_flash",
+      "name": "Golden Sunburst",
+      "category": "Light & Flash",
+      "shaderFamily": "LIGHT_FLASH",
+      "mode": 2,
+      "paramA": 1.0,
+      "paramB": 0.72,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_154_light_flash",
+      "name": "Overexpose Pop",
+      "category": "Light & Flash",
+      "shaderFamily": "LIGHT_FLASH",
+      "mode": 0,
+      "paramA": 1.8,
+      "paramB": 0.8,
+      "defaultDurationMs": 350
+    },
+    {
+      "id": "tr_155_light_flash",
+      "name": "Prism Light Leak",
+      "category": "Light & Flash",
+      "shaderFamily": "LIGHT_FLASH",
+      "mode": 2,
+      "paramA": 0.4,
+      "paramB": 0.9,
+      "defaultDurationMs": 550
+    },
+    {
+      "id": "tr_156_light_flash",
+      "name": "Camera Shutter Flash",
+      "category": "Light & Flash",
+      "shaderFamily": "LIGHT_FLASH",
+      "mode": 0,
+      "paramA": 2.4,
+      "paramB": 1.0,
+      "defaultDurationMs": 250
+    },
+    {
+      "id": "tr_157_light_flash",
+      "name": "Laser Sweep Cyan",
+      "category": "Light & Flash",
+      "shaderFamily": "LIGHT_FLASH",
+      "mode": 3,
+      "paramA": 0.0,
+      "paramB": 0.94,
+      "defaultDurationMs": 450
+    },
+    {
+      "id": "tr_158_light_flash",
+      "name": "Laser Sweep Red",
+      "category": "Light & Flash",
+      "shaderFamily": "LIGHT_FLASH",
+      "mode": 3,
+      "paramA": 1.0,
+      "paramB": 0.06,
+      "defaultDurationMs": 450
+    },
+    {
+      "id": "tr_159_light_flash",
+      "name": "X-Ray Bloom",
+      "category": "Light & Flash",
+      "shaderFamily": "LIGHT_FLASH",
+      "mode": 2,
+      "paramA": 0.9,
+      "paramB": 0.95,
+      "defaultDurationMs": 450
+    },
+    {
+      "id": "tr_160_light_flash",
+      "name": "Sunset Leak",
+      "category": "Light & Flash",
+      "shaderFamily": "LIGHT_FLASH",
+      "mode": 1,
+      "paramA": 1.0,
+      "paramB": 0.45,
+      "defaultDurationMs": 550
+    },
+    {
+      "id": "tr_161_light_flash",
+      "name": "Club Strobe Cut",
+      "category": "Light & Flash",
+      "shaderFamily": "LIGHT_FLASH",
+      "mode": 0,
+      "paramA": 3.0,
+      "paramB": 0.5,
+      "defaultDurationMs": 300
+    },
+    {
+      "id": "tr_162_light_flash",
+      "name": "Aurora Wash",
+      "category": "Light & Flash",
+      "shaderFamily": "LIGHT_FLASH",
+      "mode": 2,
+      "paramA": 0.1,
+      "paramB": 0.85,
+      "defaultDurationMs": 600
+    },
+    {
+      "id": "tr_163_light_flash",
+      "name": "Hot Glow Cut",
+      "category": "Light & Flash",
+      "shaderFamily": "LIGHT_FLASH",
+      "mode": 1,
+      "paramA": 1.0,
+      "paramB": 0.85,
+      "defaultDurationMs": 450
+    },
+    {
+      "id": "tr_164_light_flash",
+      "name": "Electric Arc",
+      "category": "Light & Flash",
+      "shaderFamily": "LIGHT_FLASH",
+      "mode": 3,
+      "paramA": 0.5,
+      "paramB": 0.98,
+      "defaultDurationMs": 400
+    },
+    {
+      "id": "tr_165_light_flash",
+      "name": "Flash Bounce",
+      "category": "Light & Flash",
+      "shaderFamily": "LIGHT_FLASH",
+      "mode": 0,
+      "paramA": 1.4,
+      "paramB": 1.2,
+      "defaultDurationMs": 350
+    },
+    {
+      "id": "tr_166_light_flash",
+      "name": "Prism Split Flash",
+      "category": "Light & Flash",
+      "shaderFamily": "LIGHT_FLASH",
+      "mode": 2,
+      "paramA": 0.7,
+      "paramB": 0.6,
+      "defaultDurationMs": 450
+    },
+    {
+      "id": "tr_167_light_flash",
+      "name": "UV Glow",
+      "category": "Light & Flash",
+      "shaderFamily": "LIGHT_FLASH",
+      "mode": 1,
+      "paramA": 0.55,
+      "paramB": 0.1,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_168_mosaic_grid",
+      "name": "Pixelate 8x8",
+      "category": "Mosaic & Pixel",
+      "shaderFamily": "MOSAIC_GRID",
+      "mode": 0,
+      "paramA": 8.0,
+      "paramB": 0.0,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_169_mosaic_grid",
+      "name": "Pixelate 16x16",
+      "category": "Mosaic & Pixel",
+      "shaderFamily": "MOSAIC_GRID",
+      "mode": 0,
+      "paramA": 16.0,
+      "paramB": 0.0,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_170_mosaic_grid",
+      "name": "Pixelate 32x32",
+      "category": "Mosaic & Pixel",
+      "shaderFamily": "MOSAIC_GRID",
+      "mode": 0,
+      "paramA": 32.0,
+      "paramB": 0.0,
+      "defaultDurationMs": 450
+    },
+    {
+      "id": "tr_171_mosaic_grid",
+      "name": "Checkerboard 4x4",
+      "category": "Mosaic & Pixel",
+      "shaderFamily": "MOSAIC_GRID",
+      "mode": 1,
+      "paramA": 4.0,
+      "paramB": 0.0,
+      "defaultDurationMs": 550
+    },
+    {
+      "id": "tr_172_mosaic_grid",
+      "name": "Checkerboard 8x8",
+      "category": "Mosaic & Pixel",
+      "shaderFamily": "MOSAIC_GRID",
+      "mode": 1,
+      "paramA": 8.0,
+      "paramB": 0.0,
+      "defaultDurationMs": 550
+    },
+    {
+      "id": "tr_173_mosaic_grid",
+      "name": "Checkerboard 12x12",
+      "category": "Mosaic & Pixel",
+      "shaderFamily": "MOSAIC_GRID",
+      "mode": 1,
+      "paramA": 12.0,
+      "paramB": 0.0,
+      "defaultDurationMs": 550
+    },
+    {
+      "id": "tr_174_mosaic_grid",
+      "name": "Random Grid Pop",
+      "category": "Mosaic & Pixel",
+      "shaderFamily": "MOSAIC_GRID",
+      "mode": 2,
+      "paramA": 6.0,
+      "paramB": 1.0,
+      "defaultDurationMs": 550
+    },
+    {
+      "id": "tr_175_mosaic_grid",
+      "name": "Micro Tiles 16",
+      "category": "Mosaic & Pixel",
+      "shaderFamily": "MOSAIC_GRID",
+      "mode": 2,
+      "paramA": 16.0,
+      "paramB": 1.0,
+      "defaultDurationMs": 550
+    },
+    {
+      "id": "tr_176_mosaic_grid",
+      "name": "Hex Mosaic",
+      "category": "Mosaic & Pixel",
+      "shaderFamily": "MOSAIC_GRID",
+      "mode": 3,
+      "paramA": 10.0,
+      "paramB": 0.5,
+      "defaultDurationMs": 600
+    },
+    {
+      "id": "tr_177_mosaic_grid",
+      "name": "Macro Block Dissolve",
+      "category": "Mosaic & Pixel",
+      "shaderFamily": "MOSAIC_GRID",
+      "mode": 2,
+      "paramA": 4.0,
+      "paramB": 2.0,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_178_mosaic_grid",
+      "name": "Grid Slide H",
+      "category": "Mosaic & Pixel",
+      "shaderFamily": "MOSAIC_GRID",
+      "mode": 1,
+      "paramA": 6.0,
+      "paramB": 1.0,
+      "defaultDurationMs": 550
+    },
+    {
+      "id": "tr_179_mosaic_grid",
+      "name": "Grid Slide V",
+      "category": "Mosaic & Pixel",
+      "shaderFamily": "MOSAIC_GRID",
+      "mode": 1,
+      "paramA": 6.0,
+      "paramB": -1.0,
+      "defaultDurationMs": 550
+    },
+    {
+      "id": "tr_180_mosaic_grid",
+      "name": "Lego Pixel Crush",
+      "category": "Mosaic & Pixel",
+      "shaderFamily": "MOSAIC_GRID",
+      "mode": 0,
+      "paramA": 24.0,
+      "paramB": 1.0,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_181_mosaic_grid",
+      "name": "Retro 8-Bit Cut",
+      "category": "Mosaic & Pixel",
+      "shaderFamily": "MOSAIC_GRID",
+      "mode": 0,
+      "paramA": 48.0,
+      "paramB": 0.5,
+      "defaultDurationMs": 450
+    },
+    {
+      "id": "tr_182_mosaic_grid",
+      "name": "Tile Cascade",
+      "category": "Mosaic & Pixel",
+      "shaderFamily": "MOSAIC_GRID",
+      "mode": 2,
+      "paramA": 9.0,
+      "paramB": 0.8,
+      "defaultDurationMs": 600
+    },
+    {
+      "id": "tr_183_mosaic_grid",
+      "name": "Cube Matrix",
+      "category": "Mosaic & Pixel",
+      "shaderFamily": "MOSAIC_GRID",
+      "mode": 3,
+      "paramA": 14.0,
+      "paramB": 0.9,
+      "defaultDurationMs": 550
+    },
+    {
+      "id": "tr_184_mosaic_grid",
+      "name": "Mosaic Scatter",
+      "category": "Mosaic & Pixel",
+      "shaderFamily": "MOSAIC_GRID",
+      "mode": 2,
+      "paramA": 20.0,
+      "paramB": 1.5,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_185_mosaic_grid",
+      "name": "Digital Blocks",
+      "category": "Mosaic & Pixel",
+      "shaderFamily": "MOSAIC_GRID",
+      "mode": 1,
+      "paramA": 10.0,
+      "paramB": 0.5,
+      "defaultDurationMs": 550
+    },
+    {
+      "id": "tr_186_blur_whip",
+      "name": "Motion Blur H",
+      "category": "Motion Blur & Whip",
+      "shaderFamily": "BLUR_WHIP",
+      "mode": 0,
+      "paramA": 1.0,
+      "paramB": 0.0,
+      "defaultDurationMs": 400
+    },
+    {
+      "id": "tr_187_blur_whip",
+      "name": "Motion Blur V",
+      "category": "Motion Blur & Whip",
+      "shaderFamily": "BLUR_WHIP",
+      "mode": 0,
+      "paramA": 0.0,
+      "paramB": 1.0,
+      "defaultDurationMs": 400
+    },
+    {
+      "id": "tr_188_blur_whip",
+      "name": "Fast Whip Left",
+      "category": "Motion Blur & Whip",
+      "shaderFamily": "BLUR_WHIP",
+      "mode": 1,
+      "paramA": -1.0,
+      "paramB": 0.0,
+      "defaultDurationMs": 350
+    },
+    {
+      "id": "tr_189_blur_whip",
+      "name": "Fast Whip Right",
+      "category": "Motion Blur & Whip",
+      "shaderFamily": "BLUR_WHIP",
+      "mode": 1,
+      "paramA": 1.0,
+      "paramB": 0.0,
+      "defaultDurationMs": 350
+    },
+    {
+      "id": "tr_190_blur_whip",
+      "name": "Fast Whip Up",
+      "category": "Motion Blur & Whip",
+      "shaderFamily": "BLUR_WHIP",
+      "mode": 1,
+      "paramA": 0.0,
+      "paramB": 1.0,
+      "defaultDurationMs": 350
+    },
+    {
+      "id": "tr_191_blur_whip",
+      "name": "Fast Whip Down",
+      "category": "Motion Blur & Whip",
+      "shaderFamily": "BLUR_WHIP",
+      "mode": 1,
+      "paramA": 0.0,
+      "paramB": -1.0,
+      "defaultDurationMs": 350
+    },
+    {
+      "id": "tr_192_blur_whip",
+      "name": "Radial Zoom Blur",
+      "category": "Motion Blur & Whip",
+      "shaderFamily": "BLUR_WHIP",
+      "mode": 2,
+      "paramA": 1.2,
+      "paramB": 0.0,
+      "defaultDurationMs": 450
+    },
+    {
+      "id": "tr_193_blur_whip",
+      "name": "Spin Blur CW",
+      "category": "Motion Blur & Whip",
+      "shaderFamily": "BLUR_WHIP",
+      "mode": 3,
+      "paramA": 1.0,
+      "paramB": 0.0,
+      "defaultDurationMs": 450
+    },
+    {
+      "id": "tr_194_blur_whip",
+      "name": "Spin Blur CCW",
+      "category": "Motion Blur & Whip",
+      "shaderFamily": "BLUR_WHIP",
+      "mode": 3,
+      "paramA": -1.0,
+      "paramB": 0.0,
+      "defaultDurationMs": 450
+    },
+    {
+      "id": "tr_195_blur_whip",
+      "name": "Ghost Trail Blur",
+      "category": "Motion Blur & Whip",
+      "shaderFamily": "BLUR_WHIP",
+      "mode": 0,
+      "paramA": 0.7,
+      "paramB": 0.7,
+      "defaultDurationMs": 550
+    },
+    {
+      "id": "tr_196_blur_whip",
+      "name": "Velocity Snap H",
+      "category": "Motion Blur & Whip",
+      "shaderFamily": "BLUR_WHIP",
+      "mode": 1,
+      "paramA": 1.6,
+      "paramB": 0.0,
+      "defaultDurationMs": 300
+    },
+    {
+      "id": "tr_197_blur_whip",
+      "name": "Velocity Snap V",
+      "category": "Motion Blur & Whip",
+      "shaderFamily": "BLUR_WHIP",
+      "mode": 1,
+      "paramA": 0.0,
+      "paramB": 1.6,
+      "defaultDurationMs": 300
+    },
+    {
+      "id": "tr_198_blur_whip",
+      "name": "Hyper Drive Blur",
+      "category": "Motion Blur & Whip",
+      "shaderFamily": "BLUR_WHIP",
+      "mode": 2,
+      "paramA": 2.2,
+      "paramB": 0.5,
+      "defaultDurationMs": 450
+    },
+    {
+      "id": "tr_199_blur_whip",
+      "name": "Smear Pan TL",
+      "category": "Motion Blur & Whip",
+      "shaderFamily": "BLUR_WHIP",
+      "mode": 0,
+      "paramA": -0.8,
+      "paramB": 0.8,
+      "defaultDurationMs": 450
+    },
+    {
+      "id": "tr_200_blur_whip",
+      "name": "Smear Pan BR",
+      "category": "Motion Blur & Whip",
+      "shaderFamily": "BLUR_WHIP",
+      "mode": 0,
+      "paramA": 0.8,
+      "paramB": -0.8,
+      "defaultDurationMs": 450
+    },
+    {
+      "id": "tr_201_blur_whip",
+      "name": "Echo Streak",
+      "category": "Motion Blur & Whip",
+      "shaderFamily": "BLUR_WHIP",
+      "mode": 2,
+      "paramA": 0.8,
+      "paramB": 1.0,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_202_blur_whip",
+      "name": "Turbulence Blur",
+      "category": "Motion Blur & Whip",
+      "shaderFamily": "BLUR_WHIP",
+      "mode": 3,
+      "paramA": 1.8,
+      "paramB": 0.8,
+      "defaultDurationMs": 450
+    },
+    {
+      "id": "tr_203_blur_whip",
+      "name": "Shutter Drag",
+      "category": "Motion Blur & Whip",
+      "shaderFamily": "BLUR_WHIP",
+      "mode": 0,
+      "paramA": 1.2,
+      "paramB": 0.2,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_204_kaleido_shape",
+      "name": "Diamond Reveal",
+      "category": "Kaleido & Cinema",
+      "shaderFamily": "KALEIDO_SHAPE",
+      "mode": 0,
+      "paramA": 1.0,
+      "paramB": 0.05,
+      "defaultDurationMs": 550
+    },
+    {
+      "id": "tr_205_kaleido_shape",
+      "name": "Diamond Close",
+      "category": "Kaleido & Cinema",
+      "shaderFamily": "KALEIDO_SHAPE",
+      "mode": 0,
+      "paramA": -1.0,
+      "paramB": 0.05,
+      "defaultDurationMs": 550
+    },
+    {
+      "id": "tr_206_kaleido_shape",
+      "name": "Kaleido 4-Fold",
+      "category": "Kaleido & Cinema",
+      "shaderFamily": "KALEIDO_SHAPE",
+      "mode": 1,
+      "paramA": 4.0,
+      "paramB": 1.0,
+      "defaultDurationMs": 650
+    },
+    {
+      "id": "tr_207_kaleido_shape",
+      "name": "Kaleido 6-Fold",
+      "category": "Kaleido & Cinema",
+      "shaderFamily": "KALEIDO_SHAPE",
+      "mode": 1,
+      "paramA": 6.0,
+      "paramB": 1.5,
+      "defaultDurationMs": 650
+    },
+    {
+      "id": "tr_208_kaleido_shape",
+      "name": "Kaleido 8-Fold",
+      "category": "Kaleido & Cinema",
+      "shaderFamily": "KALEIDO_SHAPE",
+      "mode": 1,
+      "paramA": 8.0,
+      "paramB": 2.0,
+      "defaultDurationMs": 650
+    },
+    {
+      "id": "tr_209_kaleido_shape",
+      "name": "Matte Cinema Open",
+      "category": "Kaleido & Cinema",
+      "shaderFamily": "KALEIDO_SHAPE",
+      "mode": 2,
+      "paramA": 1.0,
+      "paramB": 0.0,
+      "defaultDurationMs": 600
+    },
+    {
+      "id": "tr_210_kaleido_shape",
+      "name": "Matte Cinema Close",
+      "category": "Kaleido & Cinema",
+      "shaderFamily": "KALEIDO_SHAPE",
+      "mode": 2,
+      "paramA": -1.0,
+      "paramB": 0.0,
+      "defaultDurationMs": 600
+    },
+    {
+      "id": "tr_211_kaleido_shape",
+      "name": "Anamorphic Streak",
+      "category": "Kaleido & Cinema",
+      "shaderFamily": "KALEIDO_SHAPE",
+      "mode": 3,
+      "paramA": 1.0,
+      "paramB": 0.94,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_212_kaleido_shape",
+      "name": "Anamorphic Red",
+      "category": "Kaleido & Cinema",
+      "shaderFamily": "KALEIDO_SHAPE",
+      "mode": 3,
+      "paramA": -1.0,
+      "paramB": 0.06,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_213_kaleido_shape",
+      "name": "Crosshatch Wipe",
+      "category": "Kaleido & Cinema",
+      "shaderFamily": "KALEIDO_SHAPE",
+      "mode": 0,
+      "paramA": 2.0,
+      "paramB": 0.1,
+      "defaultDurationMs": 550
+    },
+    {
+      "id": "tr_214_kaleido_shape",
+      "name": "Film Gate Cut",
+      "category": "Kaleido & Cinema",
+      "shaderFamily": "KALEIDO_SHAPE",
+      "mode": 2,
+      "paramA": 1.5,
+      "paramB": 0.5,
+      "defaultDurationMs": 450
+    },
+    {
+      "id": "tr_215_kaleido_shape",
+      "name": "Prism Kaleido",
+      "category": "Kaleido & Cinema",
+      "shaderFamily": "KALEIDO_SHAPE",
+      "mode": 1,
+      "paramA": 5.0,
+      "paramB": 2.5,
+      "defaultDurationMs": 600
+    },
+    {
+      "id": "tr_216_kaleido_shape",
+      "name": "Diamond Soft",
+      "category": "Kaleido & Cinema",
+      "shaderFamily": "KALEIDO_SHAPE",
+      "mode": 0,
+      "paramA": 1.0,
+      "paramB": 0.25,
+      "defaultDurationMs": 650
+    },
+    {
+      "id": "tr_217_kaleido_shape",
+      "name": "Cinema Scope H",
+      "category": "Kaleido & Cinema",
+      "shaderFamily": "KALEIDO_SHAPE",
+      "mode": 2,
+      "paramA": 0.8,
+      "paramB": 1.0,
+      "defaultDurationMs": 600
+    },
+    {
+      "id": "tr_218_kaleido_shape",
+      "name": "Mirror Fold X",
+      "category": "Kaleido & Cinema",
+      "shaderFamily": "KALEIDO_SHAPE",
+      "mode": 4,
+      "paramA": 1.0,
+      "paramB": 0.0,
+      "defaultDurationMs": 550
+    },
+    {
+      "id": "tr_219_kaleido_shape",
+      "name": "Mirror Fold Y",
+      "category": "Kaleido & Cinema",
+      "shaderFamily": "KALEIDO_SHAPE",
+      "mode": 4,
+      "paramA": 0.0,
+      "paramB": 1.0,
+      "defaultDurationMs": 550
+    },
+    {
+      "id": "tr_220_kaleido_shape",
+      "name": "Quad Mirror",
+      "category": "Kaleido & Cinema",
+      "shaderFamily": "KALEIDO_SHAPE",
+      "mode": 4,
+      "paramA": 1.0,
+      "paramB": 1.0,
+      "defaultDurationMs": 600
+    },
+    {
+      "id": "tr_221_kaleido_shape",
+      "name": "Stage Curtain",
+      "category": "Kaleido & Cinema",
+      "shaderFamily": "KALEIDO_SHAPE",
+      "mode": 2,
+      "paramA": 1.0,
+      "paramB": 0.3,
+      "defaultDurationMs": 650
+    },
+    {
+      "id": "tr_222_kaleido_shape",
+      "name": "Reel Spin Cut",
+      "category": "Kaleido & Cinema",
+      "shaderFamily": "KALEIDO_SHAPE",
+      "mode": 1,
+      "paramA": 3.0,
+      "paramB": 1.2,
+      "defaultDurationMs": 500
+    },
+    {
+      "id": "tr_223_kaleido_shape",
+      "name": "Vignette Scope",
+      "category": "Kaleido & Cinema",
+      "shaderFamily": "KALEIDO_SHAPE",
+      "mode": 3,
+      "paramA": 0.5,
+      "paramB": 0.5,
+      "defaultDurationMs": 550
+    },
+    {
+      "id": "tr_224_kaleido_shape",
+      "name": "Tri-Split Kaleido",
+      "category": "Kaleido & Cinema",
+      "shaderFamily": "KALEIDO_SHAPE",
+      "mode": 1,
+      "paramA": 3.0,
+      "paramB": 2.0,
+      "defaultDurationMs": 600
+    },
+    {
+      "id": "tr_225_kaleido_shape",
+      "name": "Curtain Fade",
+      "category": "Kaleido & Cinema",
+      "shaderFamily": "KALEIDO_SHAPE",
+      "mode": 2,
+      "paramA": -1.0,
+      "paramB": 0.6,
+      "defaultDurationMs": 600
+    }
+  ]
+}
