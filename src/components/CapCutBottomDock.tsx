@@ -147,6 +147,7 @@ const TEXT_COLORS = ['#FFFFFF', '#FFE600', '#00CAE0', '#34D399', '#F43F5E', '#A7
 
 const EFFECT_CATEGORIES: EffectCategory[] = [
   'All',
+  'Trending Viral',
   'Glitch & Cyber',
   'Lens & Warp',
   'Glow & Neon',
@@ -537,7 +538,7 @@ export function StudioToolInspector({
                   type="text"
                   value={fxQuery}
                   onChange={(e) => setFxQuery(e.target.value)}
-                  placeholder="Search 44 GPU effects (Glitch, Kaleido, LUT, Bloom)..."
+                  placeholder={`Search ${VIDEO_EFFECTS.length - 1} GPU effects (Anime, RGB Split, VHS, Glitch)...`}
                   className="w-full pl-8 pr-3 py-1.5 bg-[#0C0C10] border border-[#24242E] focus:border-[#00CAE0] rounded-lg text-xs text-white outline-none"
                 />
               </div>

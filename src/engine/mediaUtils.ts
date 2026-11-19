@@ -5,10 +5,13 @@ export async function extractVideoThumbnails(
 ): Promise<string[]> {
   return new Promise((resolve) => {
     const vid = document.createElement('video');
-    vid.src = videoUrl;
+    vid.preload = 'auto';
     vid.muted = true;
     vid.playsInline = true;
-    vid.crossOrigin = 'anonymous';
+    if (videoUrl.startsWith('http://') || videoUrl.startsWith('https://')) {
+      vid.crossOrigin = 'anonymous';
+    }
+    vid.src = videoUrl;
 
     const thumbs: string[] = [];
     const safeDur = Math.max(0.5, durationSec);
@@ -22,16 +25,31 @@ export async function extractVideoThumbnails(
       return;
     }
 
+    let settled = false;
     let current = 0;
 
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      vid.pause();
+      vid.removeAttribute('src');
+      vid.load();
+      resolve(thumbs);
+    };
+
     const captureNext = () => {
+      if (settled) return;
       if (current >= count) {
-        vid.src = '';
-        resolve(thumbs);
+        finish();
         return;
       }
-      const targetTime = Math.min(safeDur - 0.05, (current / count) * safeDur);
-      vid.currentTime = Math.max(0, targetTime);
+      const targetTime = Math.min(safeDur - 0.08, (current / count) * safeDur + 0.05);
+      try {
+        vid.currentTime = Math.max(0, targetTime);
+      } catch {
+        current += 1;
+        captureNext();
+      }
     };
 
     vid.onloadeddata = () => {
@@ -41,7 +59,7 @@ export async function extractVideoThumbnails(
     vid.onseeked = () => {
       try {
         ctx.drawImage(vid, 0, 0, canvas.width, canvas.height);
-        thumbs.push(canvas.toDataURL('image/jpeg', 0.65));
+        thumbs.push(canvas.toDataURL('image/jpeg', 0.62));
       } catch {
         // Ignore cross-origin draw errors
       }
@@ -49,10 +67,8 @@ export async function extractVideoThumbnails(
       captureNext();
     };
 
-    vid.onerror = () => resolve([]);
-    window.setTimeout(() => {
-      if (thumbs.length === 0) resolve([]);
-    }, 3500);
+    vid.onerror = finish;
+    window.setTimeout(finish, 14000);
   });
 }
 

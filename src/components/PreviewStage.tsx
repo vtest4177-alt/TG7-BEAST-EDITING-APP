@@ -16,6 +16,8 @@ import {
   Undo2,
 } from 'lucide-react';
 import {
+  computeRemappedSourceTime,
+  evaluateSpeedAt,
   formatTimecode,
   getProjectDuration,
   interpolateTransform,
@@ -60,7 +62,8 @@ export function PreviewStage({
 }: PreviewStageProps) {
   const stageSectionRef = useRef<HTMLElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const lastSeekTsRef = useRef<number>(0);
+  const lastSeekTsRef = useRef<Map<string, number>>(new Map());
+  const pendingSeekTimersRef = useRef<Map<string, number>>(new Map());
   const renderRafRef = useRef<number | null>(null);
   const latestRenderStateRef = useRef({
     project,
@@ -81,8 +84,22 @@ export function PreviewStage({
   const totalDuration = getProjectDuration(project);
   const dims = ASPECT_DIMENSIONS[project.aspectRatio];
   const selectedClip = project.clips.find((c) => c.id === project.selectedClipId) ?? null;
+  const clipMediaSig = project.clips.map((c) => c.id).join('|');
 
   latestRenderStateRef.current = { project, mediaElements, dims };
+
+  const scheduleCanvasRedraw = () => {
+    if (renderRafRef.current !== null) return;
+    renderRafRef.current = requestAnimationFrame(() => {
+      renderRafRef.current = null;
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      const { project: p, mediaElements: media, dims: d } = latestRenderStateRef.current;
+      renderCompositeFrame(ctx, d.w, d.h, p, media, p.playheadSec);
+    });
+  };
 
   useEffect(() => {
     const onFsChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
@@ -90,33 +107,113 @@ export function PreviewStage({
     return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
 
+  // Redraw immediately whenever any attached <video> or <img> finishes async seek or buffering!
+  useEffect(() => {
+    const cleanups: (() => void)[] = [];
+    for (const el of mediaElements.values()) {
+      const onReady = () => scheduleCanvasRedraw();
+      if (el instanceof HTMLVideoElement) {
+        el.addEventListener('seeked', onReady);
+        el.addEventListener('loadeddata', onReady);
+        el.addEventListener('canplay', onReady);
+        el.addEventListener('playing', onReady);
+        cleanups.push(() => {
+          el.removeEventListener('seeked', onReady);
+          el.removeEventListener('loadeddata', onReady);
+          el.removeEventListener('canplay', onReady);
+          el.removeEventListener('playing', onReady);
+        });
+      } else if (el instanceof HTMLImageElement) {
+        el.addEventListener('load', onReady);
+        cleanups.push(() => el.removeEventListener('load', onReady));
+      }
+    }
+    return () => {
+      cleanups.forEach((fn) => fn());
+    };
+  }, [mediaElements, clipMediaSig]);
+
   useEffect(() => {
     const mainTrack = project.tracks.find((t) => t.type === 'video');
     const now = performance.now();
-    const canSeekNow = now - lastSeekTsRef.current > 80;
+    const activeElements = new Set<HTMLMediaElement>();
 
+    // Pass 1: collect active media elements so inactive clips never pause shared/active elements
+    for (const clip of project.clips) {
+      const el = mediaElements.get(clip.id);
+      if (!(el instanceof HTMLMediaElement)) continue;
+      const isVisible =
+        project.playheadSec >= clip.startSec &&
+        project.playheadSec <= clip.startSec + clip.durationSec;
+      if (isVisible) {
+        activeElements.add(el);
+      }
+    }
+
+    // Pass 2: sync playback & seeking per clip
     for (const clip of project.clips) {
       if (clip.sourceType === 'local-video') {
         const el = mediaElements.get(clip.id);
         if (el instanceof HTMLVideoElement) {
+          const track = project.tracks.find((t) => t.id === clip.trackId);
           const isVisible =
             project.playheadSec >= clip.startSec &&
             project.playheadSec <= clip.startSec + clip.durationSec;
+
           if (isVisible) {
-            const targetLocal = Math.max(0, project.playheadSec - clip.startSec + clip.trimStartSec);
-            if (!project.isPlaying) {
-              if (!el.seeking && canSeekNow && Math.abs(el.currentTime - targetLocal) > 0.1) {
-                el.currentTime = targetLocal;
-                lastSeekTsRef.current = now;
-              }
-            } else if (el.paused) {
-              if (!el.seeking) el.currentTime = targetLocal;
-              void el.play().catch(() => undefined);
+            const localTime = Math.max(0, project.playheadSec - clip.startSec);
+            const targetLocal = computeRemappedSourceTime(clip, localTime);
+            const mediaDur =
+              Number.isFinite(el.duration) && el.duration > 0 ? el.duration - 0.04 : targetLocal;
+            const safeTarget = Math.max(0, Math.min(mediaDur, targetLocal));
+            const speedNow = Math.max(
+              0.25,
+              Math.min(
+                4.0,
+                evaluateSpeedAt(
+                  clip.speedRamp.points,
+                  localTime / Math.max(0.1, clip.durationSec)
+                )
+              )
+            );
+            if (Math.abs(el.playbackRate - speedNow) > 0.05) {
+              el.playbackRate = speedNow;
             }
-          } else if (!el.paused) {
+
+            if (!project.isPlaying) {
+              if (!el.paused) el.pause();
+              const diff = Math.abs(el.currentTime - safeTarget);
+              if (diff > 0.06 && !el.seeking) {
+                const lastTs = lastSeekTsRef.current.get(clip.id) ?? 0;
+                if (now - lastTs > 65) {
+                  el.currentTime = safeTarget;
+                  lastSeekTsRef.current.set(clip.id, now);
+                } else {
+                  const prevTimer = pendingSeekTimersRef.current.get(clip.id);
+                  if (prevTimer !== undefined) window.clearTimeout(prevTimer);
+                  const tid = window.setTimeout(() => {
+                    pendingSeekTimersRef.current.delete(clip.id);
+                    if (!el.seeking && !latestRenderStateRef.current.project.isPlaying) {
+                      el.currentTime = safeTarget;
+                    }
+                  }, 70);
+                  pendingSeekTimersRef.current.set(clip.id, tid);
+                }
+              }
+            } else {
+              if (el.paused) {
+                if (Math.abs(el.currentTime - safeTarget) > 0.15 && !el.seeking) {
+                  el.currentTime = safeTarget;
+                }
+                void el.play().catch(() => undefined);
+              } else if (!el.seeking && Math.abs(el.currentTime - safeTarget) > 0.55) {
+                el.currentTime = safeTarget;
+              }
+            }
+          } else if (!el.paused && !activeElements.has(el)) {
             el.pause();
           }
-          el.muted = mainTrack ? mainTrack.muted : false;
+          el.muted = track?.type === 'video' ? Boolean(mainTrack?.muted) : Boolean(track?.muted);
         }
       } else if (clip.sourceType === 'local-audio') {
         const el = mediaElements.get(clip.id);
@@ -134,30 +231,26 @@ export function PreviewStage({
               void el.play().catch(() => undefined);
             }
             el.volume = Math.max(0, Math.min(1, clip.volume));
-          } else if (!el.paused) {
+          } else if (!el.paused && !activeElements.has(el)) {
             el.pause();
           }
         }
       }
     }
 
-    if (renderRafRef.current !== null) return;
-    renderRafRef.current = requestAnimationFrame(() => {
-      renderRafRef.current = null;
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-      const { project: p, mediaElements: media, dims: d } = latestRenderStateRef.current;
-      renderCompositeFrame(ctx, d.w, d.h, p, media, p.playheadSec);
-    });
+    scheduleCanvasRedraw();
   }, [project, mediaElements, dims.w, dims.h]);
 
   useEffect(() => {
+    const timers = pendingSeekTimersRef.current;
     return () => {
       if (renderRafRef.current !== null) {
         cancelAnimationFrame(renderRafRef.current);
       }
+      for (const tid of timers.values()) {
+        window.clearTimeout(tid);
+      }
+      timers.clear();
     };
   }, []);
 

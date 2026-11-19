@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import {
+  ArrowLeft,
   ArrowLeftRight,
+  ArrowRight,
   Diamond,
   Eye,
   EyeOff,
@@ -35,6 +37,7 @@ interface CapCutTimelineProps {
     mode: TimelineDragMode
   ) => void;
   onFinishDrag?: (clipId?: string, mode?: TimelineDragMode) => void;
+  onReorderMainClip?: (clipId: string, direction: -1 | 1) => void;
   onToggleTrackFlag?: (trackId: string, flag: 'muted' | 'locked' | 'hidden') => void;
   onToggleMainMute: () => void;
   onOpenMainGallery: () => void;
@@ -65,6 +68,7 @@ export function CapCutTimeline({
   onOpenTransition,
   onMoveOrTrimClip,
   onFinishDrag,
+  onReorderMainClip,
   onToggleTrackFlag,
   onToggleMainMute,
   onOpenMainGallery,
@@ -133,6 +137,9 @@ export function CapCutTimeline({
     mainClips.length > 0
       ? Math.max(...mainClips.map((c) => c.startSec + c.durationSec))
       : 0;
+
+  const selectedMainIndex = mainClips.findIndex((c) => c.id === project.selectedClipId);
+  const selectedMainClip = selectedMainIndex >= 0 ? mainClips[selectedMainIndex] : null;
 
   const snapPointsRef = useRef<number[]>([0]);
   snapPointsRef.current = useMemo(() => {
@@ -369,7 +376,7 @@ export function CapCutTimeline({
           } catch {
             // ignore on browsers without vibration API
           }
-        }, 195);
+        }, 125);
 
         beginDragSession(pointerId, session);
         return;
@@ -401,6 +408,12 @@ export function CapCutTimeline({
   );
 
   const rulerSecCount = Math.ceil(maxScrubSec + 2);
+  const timelineContentWidthPx = Math.max(
+    viewportWidth * 2,
+    Math.ceil(maxScrubSec * pxPerSec) + viewportWidth
+  );
+  // Quantize visible left edge to 24px steps so long clip/layer labels stay visible past 6s without thrashing memoization
+  const visibleTrackLeftPx = Math.max(0, Math.floor(-trackShiftX / 24) * 24);
 
   return (
     <section
@@ -426,105 +439,168 @@ export function CapCutTimeline({
           onSeek(next);
         }
       }}
-      className="flex-1 min-h-[215px] lg:min-h-[245px] bg-[#0B0B0D] relative overflow-hidden select-none touch-none cursor-ew-resize flex flex-col"
+      className="flex-1 min-h-[225px] lg:min-h-[255px] bg-[#0B0B0D] relative overflow-hidden select-none touch-none cursor-ew-resize flex flex-col"
     >
-      {/* Top-Left Fixed Controls: Jump to 00:00, Main Mute & Gesture Hint */}
+      {/* Dedicated Top Timeline Header Bar (never overlaps ruler numbers) */}
       <div
         onPointerDown={(e) => e.stopPropagation()}
-        className="absolute top-1 left-2 z-50 flex items-center gap-1.5"
+        className="h-8 px-2 bg-[#0E0E12] border-b border-[#1A1A22] flex items-center justify-between gap-2 shrink-0 z-50"
       >
-        <motion.button
-          whileTap={{ scale: 0.9 }}
-          type="button"
-          aria-label="Jump to start 00:00"
-          title="Jump to 00:00"
-          onClick={() => onSeek(0)}
-          className="px-1.5 py-0.5 rounded bg-[#141418]/90 hover:bg-[#1E1E26] border border-[#24242C] text-[10px] font-mono text-[#00CAE0] flex items-center gap-1 cursor-pointer"
-        >
-          <SkipBack className="w-3 h-3" />
-          <span>00:00</span>
-        </motion.button>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            type="button"
+            aria-label="Jump to start 00:00"
+            title="Jump to 00:00"
+            onClick={() => onSeek(0)}
+            className="px-1.5 py-0.5 rounded bg-[#141418] hover:bg-[#1E1E26] border border-[#24242C] text-[10px] font-mono text-[#00CAE0] flex items-center gap-1 cursor-pointer shrink-0"
+          >
+            <SkipBack className="w-3 h-3" />
+            <span>00:00</span>
+          </motion.button>
 
-        <motion.button
-          whileTap={{ scale: 0.9 }}
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleMainMute();
-          }}
-          title={mainTrack.muted ? 'Unmute clip audio' : 'Mute clip audio'}
-          className="px-2 py-0.5 rounded bg-[#141418]/90 hover:bg-[#1E1E26] border border-[#24242C] flex items-center gap-1 text-[10px] text-[#A1A1AE] hover:text-white cursor-pointer"
-        >
-          {mainTrack.muted ? (
-            <VolumeX className="w-3 h-3 text-[#F59E0B]" />
-          ) : (
-            <Volume2 className="w-3 h-3" />
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleMainMute();
+            }}
+            title={mainTrack.muted ? 'Unmute clip audio' : 'Mute clip audio'}
+            className="px-2 py-0.5 rounded bg-[#141418] hover:bg-[#1E1E26] border border-[#24242C] flex items-center gap-1 text-[10px] text-[#A1A1AE] hover:text-white cursor-pointer shrink-0"
+          >
+            {mainTrack.muted ? (
+              <VolumeX className="w-3 h-3 text-[#F59E0B]" />
+            ) : (
+              <Volume2 className="w-3 h-3" />
+            )}
+            <span className="hidden sm:inline">{mainTrack.muted ? 'Muted' : 'Audio'}</span>
+          </motion.button>
+
+          <span className="hidden md:inline text-[10px] text-[#6B6B78] pl-1 pointer-events-none truncate">
+            Drag ⋮⋮ or tap ◀ ▶ to reorder
+          </span>
+
+          {selectedMainClip && mainClips.length > 1 && onReorderMainClip && (
+            <div className="flex items-center gap-1 ml-1 bg-[#14141A] border border-[#00CAE0]/40 rounded px-1 py-0.5 shrink-0">
+              <motion.button
+                whileTap={{ scale: 0.85 }}
+                type="button"
+                disabled={selectedMainIndex <= 0}
+                onClick={() => onReorderMainClip(selectedMainClip.id, -1)}
+                title="Move clip earlier"
+                aria-label="Move clip earlier"
+                className="px-1.5 py-0.5 rounded bg-[#1E1E28] hover:bg-[#00CAE0] hover:text-black disabled:opacity-30 text-[10px] text-white flex items-center gap-0.5 cursor-pointer"
+              >
+                <ArrowLeft className="w-3 h-3" />
+                <span className="hidden sm:inline">Earlier</span>
+              </motion.button>
+              <motion.button
+                whileTap={{ scale: 0.85 }}
+                type="button"
+                disabled={selectedMainIndex >= mainClips.length - 1}
+                onClick={() => onReorderMainClip(selectedMainClip.id, 1)}
+                title="Move clip later"
+                aria-label="Move clip later"
+                className="px-1.5 py-0.5 rounded bg-[#1E1E28] hover:bg-[#00CAE0] hover:text-black disabled:opacity-30 text-[10px] text-white flex items-center gap-0.5 cursor-pointer"
+              >
+                <span className="hidden sm:inline">Later</span>
+                <ArrowRight className="w-3 h-3" />
+              </motion.button>
+            </div>
           )}
-          <span className="hidden sm:inline">{mainTrack.muted ? 'Muted' : 'Audio'}</span>
-        </motion.button>
+        </div>
 
-        <span className="hidden md:inline text-[10px] text-[#6B6B78] pl-1 pointer-events-none">
-          Hold clip or drag ⋮⋮ to move
-        </span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenMainGallery();
+            }}
+            aria-label="Add main video or photo"
+            title="Add another main video or photo"
+            className="h-6 px-2 rounded-md bg-[#00CAE0] hover:brightness-110 text-black text-[10px] font-bold flex items-center gap-1 shadow-[0_0_12px_rgba(0,202,224,0.35)] cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5 stroke-[2.8]" />
+            <span>Video</span>
+          </motion.button>
+
+          <div className="flex items-center gap-0.5 bg-[#141418] border border-[#24242C] rounded-md p-0.5">
+            <motion.button
+              whileTap={{ scale: 0.85 }}
+              type="button"
+              aria-label="Zoom out timeline"
+              onClick={() => onChangeZoom(Math.max(48, pxPerSec - 18))}
+              className="p-1 text-[#A1A1AE] hover:text-white cursor-pointer"
+            >
+              <ZoomOut className="w-3.5 h-3.5" />
+            </motion.button>
+            <motion.button
+              whileTap={{ scale: 0.85 }}
+              type="button"
+              aria-label="Zoom in timeline"
+              onClick={() => onChangeZoom(Math.min(220, pxPerSec + 18))}
+              className="p-1 text-[#A1A1AE] hover:text-white cursor-pointer"
+            >
+              <ZoomIn className="w-3.5 h-3.5" />
+            </motion.button>
+          </div>
+        </div>
       </div>
 
-      {/* Floating Zoom Buttons */}
-      <div
-        onPointerDown={(e) => e.stopPropagation()}
-        className="absolute top-1 right-2 z-50 flex items-center gap-1 bg-[#141418]/90 border border-[#24242C] rounded-md p-0.5"
-      >
-        <motion.button
-          whileTap={{ scale: 0.85 }}
-          type="button"
-          aria-label="Zoom out timeline"
-          onClick={() => onChangeZoom(Math.max(48, pxPerSec - 18))}
-          className="p-1 text-[#A1A1AE] hover:text-white cursor-pointer"
-        >
-          <ZoomOut className="w-3.5 h-3.5" />
-        </motion.button>
-        <motion.button
-          whileTap={{ scale: 0.85 }}
-          type="button"
-          aria-label="Zoom in timeline"
-          onClick={() => onChangeZoom(Math.min(220, pxPerSec + 18))}
-          className="p-1 text-[#A1A1AE] hover:text-white cursor-pointer"
-        >
-          <ZoomIn className="w-3.5 h-3.5" />
-        </motion.button>
-      </div>
-
-      {/* Moving Timeline Surface */}
-      <div
-        style={{ transform: `translate3d(${trackShiftX}px, 0, 0)` }}
-        className="relative flex-1 flex flex-col will-change-transform"
-      >
-        <RulerTrack rulerSecCount={rulerSecCount} pxPerSec={pxPerSec} />
-
-        {/* Persistent 00:00 Starting Line across all tracks */}
+      {/* Pinned Top Ruler Track (synchronously shifted horizontally, never clips layers below) */}
+      <div className="h-6 relative shrink-0 overflow-hidden border-b border-[#1C1C22] bg-[#0B0B0D]">
         <div
-          aria-hidden="true"
-          style={{ left: '0px' }}
-          className="absolute top-6 bottom-0 w-[2px] bg-[#00CAE0]/75 pointer-events-none z-20"
-        />
+          style={{
+            width: `${timelineContentWidthPx}px`,
+            transform: `translate3d(${trackShiftX}px, 0, 0)`,
+          }}
+          className="h-full relative will-change-transform"
+        >
+          <RulerTrack
+            rulerSecCount={rulerSecCount}
+            pxPerSec={pxPerSec}
+            playheadSec={project.playheadSec}
+            viewportWidth={viewportWidth}
+          />
+        </div>
+      </div>
 
-        {/* Magnetic Snap Vertical Laser Line */}
-        {snapLineSec !== null && (
+      {/* Non-Translated Vertical Scroll Container wrapping Full-Width Horizontally Translated Tracks */}
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden relative">
+        <div
+          style={{
+            width: `${timelineContentWidthPx}px`,
+            transform: `translate3d(${trackShiftX}px, 0, 0)`,
+          }}
+          className="relative min-h-full py-2.5 space-y-2 will-change-transform"
+        >
+          {/* Persistent 00:00 Starting Line across full height of all tracks */}
           <div
             aria-hidden="true"
-            style={{ left: `${snapLineSec * pxPerSec}px` }}
-            className="absolute top-6 bottom-0 w-[1.5px] bg-[#00CAE0] shadow-[0_0_10px_#00CAE0] pointer-events-none z-45"
+            style={{ left: '0px' }}
+            className="absolute top-0 bottom-0 w-[2px] bg-[#00CAE0]/75 pointer-events-none z-20"
           />
-        )}
 
-        {/* Tracks Container */}
-        <div className="flex-1 overflow-y-auto overflow-x-visible py-3 space-y-2.5 relative touch-none">
+          {/* Magnetic Snap Vertical Laser Line */}
+          {snapLineSec !== null && (
+            <div
+              aria-hidden="true"
+              style={{ left: `${snapLineSec * pxPerSec}px` }}
+              className="absolute top-0 bottom-0 w-[1.5px] bg-[#00CAE0] shadow-[0_0_10px_#00CAE0] pointer-events-none z-45"
+            />
+          )}
+
           {/* MAIN VIDEO TRACK */}
-          <div className="h-[56px] relative">
+          <div className="h-[54px] relative bg-white/[0.015]">
             {mainClips.map((clip) => (
               <ClipStrip
                 key={clip.id}
                 clip={clip}
                 pxPerSec={pxPerSec}
+                visibleTrackLeftPx={visibleTrackLeftPx}
                 isSelected={project.selectedClipId === clip.id}
                 isTrimming={trimmingClipId === clip.id}
                 isMoving={movingClipId === clip.id}
@@ -573,7 +649,7 @@ export function CapCutTimeline({
               );
             })}
 
-            {/* CapCut [ + ] Button */}
+            {/* CapCut [ + ] Button at end of main track */}
             <motion.button
               whileTap={{ scale: 0.88 }}
               type="button"
@@ -599,7 +675,7 @@ export function CapCutTimeline({
             return (
               <div
                 key={track.id}
-                className={`h-[40px] relative transition-opacity ${
+                className={`h-[40px] relative bg-white/[0.012] transition-opacity ${
                   track.hidden ? 'opacity-40' : 'opacity-100'
                 }`}
               >
@@ -608,6 +684,7 @@ export function CapCutTimeline({
                     key={clip.id}
                     clip={clip}
                     pxPerSec={pxPerSec}
+                    visibleTrackLeftPx={visibleTrackLeftPx}
                     isSelected={project.selectedClipId === clip.id}
                     isTrimming={trimmingClipId === clip.id}
                     isMoving={movingClipId === clip.id}
@@ -664,7 +741,7 @@ export function CapCutTimeline({
             return (
               <div
                 key={track.id}
-                className={`h-[38px] relative transition-opacity ${
+                className={`h-[36px] relative bg-white/[0.012] transition-opacity ${
                   track.muted ? 'opacity-45' : 'opacity-100'
                 }`}
               >
@@ -673,6 +750,7 @@ export function CapCutTimeline({
                     key={clip.id}
                     clip={clip}
                     pxPerSec={pxPerSec}
+                    visibleTrackLeftPx={visibleTrackLeftPx}
                     isSelected={project.selectedClipId === clip.id}
                     isTrimming={trimmingClipId === clip.id}
                     isMoving={movingClipId === clip.id}
@@ -687,62 +765,17 @@ export function CapCutTimeline({
               </div>
             );
           })}
-
-          {/* Inline Add Audio / Layer / Meme + Track Controls Row */}
-          <div className="h-8 relative flex items-center gap-2">
-            <motion.button
-              whileTap={{ scale: 0.92 }}
-              type="button"
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenQuickAdd('audio');
-              }}
-              className="px-2.5 py-1 rounded bg-[#16161B] hover:bg-[#1F1F26] border border-[#26262E] text-[11px] text-[#A1A1AE] hover:text-white flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
-            >
-              <Music className="w-3 h-3 text-[#00CAE0]" />
-              <span>+ Add audio</span>
-            </motion.button>
-
-            <motion.button
-              whileTap={{ scale: 0.92 }}
-              type="button"
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenQuickAdd('overlay');
-              }}
-              className="px-2.5 py-1 rounded bg-[#16161B] hover:bg-[#1F1F26] border border-[#26262E] text-[11px] text-[#A1A1AE] hover:text-white flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
-            >
-              <Plus className="w-3 h-3 text-[#A78BFA]" />
-              <span>+ Add layer</span>
-            </motion.button>
-
-            <motion.button
-              whileTap={{ scale: 0.92 }}
-              type="button"
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenQuickAdd('meme');
-              }}
-              className="px-2.5 py-1 rounded bg-[#16161B] hover:bg-[#1F1F26] border border-[#26262E] text-[11px] text-[#A1A1AE] hover:text-white flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
-            >
-              <Plus className="w-3 h-3 text-[#FBBF24]" />
-              <span>+ Meme / SFX</span>
-            </motion.button>
-          </div>
         </div>
       </div>
 
-      {/* Left Compact Track Control Pills (Hide/Mute/Lock for active tracks) */}
-      {onToggleTrackFlag && (overlayTracks.length > 0 || audioTracks.length > 0) && (
-        <div
-          onPointerDown={(e) => e.stopPropagation()}
-          className="absolute bottom-2 left-2 z-40 flex items-center gap-1 bg-[#121216]/90 border border-[#24242C] rounded-md px-1.5 py-0.5 backdrop-blur-sm"
-        >
-          {overlayTracks[0] && (
-            <>
+      {/* Pinned Bottom Quick-Add Strip + Track Controls (always reachable at any scroll timestamp) */}
+      <div
+        onPointerDown={(e) => e.stopPropagation()}
+        className="h-9 px-2 bg-[#0E0E12] border-t border-[#1A1A22] flex items-center justify-between gap-2 shrink-0 z-40 overflow-x-auto"
+      >
+        <div className="flex items-center gap-1.5 shrink-0">
+          {onToggleTrackFlag && overlayTracks[0] && (
+            <div className="flex items-center gap-0.5 bg-[#14141A] border border-[#24242C] rounded px-1 py-0.5">
               <button
                 type="button"
                 title={overlayTracks[0].hidden ? 'Show Layer Track' : 'Hide Layer Track'}
@@ -767,14 +800,14 @@ export function CapCutTimeline({
                   <Unlock className="w-3 h-3" />
                 )}
               </button>
-            </>
+            </div>
           )}
-          {audioTracks[0] && (
+          {onToggleTrackFlag && audioTracks[0] && (
             <button
               type="button"
               title={audioTracks[0].muted ? 'Unmute Audio Track' : 'Mute Audio Track'}
               onClick={() => onToggleTrackFlag(audioTracks[0].id, 'muted')}
-              className="p-1 text-[#A1A1AE] hover:text-white cursor-pointer"
+              className="p-1 rounded bg-[#14141A] border border-[#24242C] text-[#A1A1AE] hover:text-white cursor-pointer"
             >
               {audioTracks[0].muted ? (
                 <VolumeX className="w-3 h-3 text-[#F59E0B]" />
@@ -784,12 +817,53 @@ export function CapCutTimeline({
             </button>
           )}
         </div>
-      )}
 
-      {/* FIXED CENTER WHITE PLAYHEAD */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <motion.button
+            whileTap={{ scale: 0.92 }}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenQuickAdd('audio');
+            }}
+            className="px-2.5 py-1 rounded bg-[#16161B] hover:bg-[#1F1F26] border border-[#26262E] text-[10px] sm:text-[11px] text-[#A1A1AE] hover:text-white flex items-center gap-1 cursor-pointer whitespace-nowrap"
+          >
+            <Music className="w-3 h-3 text-[#00CAE0]" />
+            <span>+ Audio</span>
+          </motion.button>
+
+          <motion.button
+            whileTap={{ scale: 0.92 }}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenQuickAdd('overlay');
+            }}
+            className="px-2.5 py-1 rounded bg-[#16161B] hover:bg-[#1F1F26] border border-[#26262E] text-[10px] sm:text-[11px] text-[#A1A1AE] hover:text-white flex items-center gap-1 cursor-pointer whitespace-nowrap"
+          >
+            <Plus className="w-3 h-3 text-[#A78BFA]" />
+            <span>+ Layer</span>
+          </motion.button>
+
+          <motion.button
+            whileTap={{ scale: 0.92 }}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenQuickAdd('meme');
+            }}
+            className="px-2.5 py-1 rounded bg-[#16161B] hover:bg-[#1F1F26] border border-[#26262E] text-[10px] sm:text-[11px] text-[#A1A1AE] hover:text-white flex items-center gap-1 cursor-pointer whitespace-nowrap"
+          >
+            <Plus className="w-3 h-3 text-[#FBBF24]" />
+            <span>+ Meme / SFX</span>
+          </motion.button>
+        </div>
+      </div>
+
+      {/* FIXED CENTER WHITE PLAYHEAD (starts below header bar) */}
       <div
         aria-hidden="true"
-        className="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-[2px] bg-white pointer-events-none z-40 shadow-[0_0_8px_rgba(255,255,255,0.65)]"
+        className="absolute top-8 bottom-9 left-1/2 -translate-x-1/2 w-[2px] bg-white pointer-events-none z-40 shadow-[0_0_8px_rgba(255,255,255,0.65)]"
       />
     </section>
   );
@@ -798,13 +872,25 @@ export function CapCutTimeline({
 const RulerTrack = React.memo(function RulerTrack({
   rulerSecCount,
   pxPerSec,
+  playheadSec,
+  viewportWidth,
 }: {
   rulerSecCount: number;
   pxPerSec: number;
+  playheadSec: number;
+  viewportWidth: number;
 }) {
+  const halfViewSec = viewportWidth / (2 * pxPerSec);
+  const startSec = Math.max(0, Math.floor(playheadSec - halfViewSec - 2));
+  const endSec = Math.min(rulerSecCount - 1, Math.ceil(playheadSec + halfViewSec + 2));
+  const ticks: number[] = [];
+  for (let s = startSec; s <= endSec; s++) {
+    ticks.push(s);
+  }
+
   return (
-    <div className="h-6 relative shrink-0 border-b border-[#1C1C22]">
-      {Array.from({ length: rulerSecCount }).map((_, sec) => (
+    <div className="h-full relative">
+      {ticks.map((sec) => (
         <div
           key={sec}
           style={{ left: `${sec * pxPerSec}px` }}
@@ -832,6 +918,7 @@ const RulerTrack = React.memo(function RulerTrack({
 interface ClipStripProps {
   clip: Clip;
   pxPerSec: number;
+  visibleTrackLeftPx: number;
   isSelected: boolean;
   isTrimming: boolean;
   isMoving: boolean;
@@ -853,6 +940,7 @@ interface ClipStripProps {
 const ClipStrip = React.memo(function ClipStrip({
   clip,
   pxPerSec,
+  visibleTrackLeftPx,
   isSelected,
   isTrimming,
   isMoving,
@@ -865,6 +953,7 @@ const ClipStrip = React.memo(function ClipStrip({
 }: ClipStripProps) {
   const leftPx = clip.startSec * pxPerSec;
   const widthPx = Math.max(26, clip.durationSec * pxPerSec);
+  const labelShiftPx = Math.max(0, Math.min(Math.max(0, widthPx - 96), visibleTrackLeftPx - leftPx + 8));
 
   const bgClass =
     variant === 'video'
@@ -875,7 +964,9 @@ const ClipStrip = React.memo(function ClipStrip({
           ? 'bg-[#36281A]'
           : 'bg-[#112B2B]';
 
-  const thumbCount = Math.max(2, Math.ceil(widthPx / 48));
+  // Cap DOM thumbnail nodes at 18 so long 2–10 minute videos never stutter timeline rendering
+  const thumbCount = Math.max(2, Math.min(18, Math.ceil(widthPx / 48)));
+  const tileWidthStyle = { width: `${Math.max(48, widthPx / thumbCount)}px` };
 
   return (
     <div
@@ -883,7 +974,7 @@ const ClipStrip = React.memo(function ClipStrip({
       onPointerDown={(e) => {
         e.stopPropagation();
         onSelectClip(clip.id);
-        // Require ~200ms hold on clip body so quick swipes smoothly scrub timeline instead of bumping clips!
+        // Require ~125ms hold on clip body so quick swipes scrub timeline while deliberate hold moves clips smoothly
         onStartDrag(clip, 'move-clip', e.clientX, e.clientY, e.pointerId, true);
       }}
       onDoubleClick={(e) => {
@@ -910,26 +1001,34 @@ const ClipStrip = React.memo(function ClipStrip({
               : 'border border-white/15'
         }`}
       >
-        {variant === 'video' && clip.thumbnails && clip.thumbnails.length > 0 && (
-          <div className="absolute inset-0 flex pointer-events-none">
-            {Array.from({ length: thumbCount }).map((_, idx) => (
-              <img
-                key={idx}
-                src={clip.thumbnails![idx % clip.thumbnails!.length]}
-                alt=""
-                draggable={false}
-                className="h-full w-12 object-cover shrink-0 border-r border-black/30"
-              />
-            ))}
-          </div>
-        )}
+        {(variant === 'video' || variant === 'overlay') &&
+          clip.thumbnails &&
+          clip.thumbnails.length > 0 && (
+            <div
+              className={`absolute inset-0 flex pointer-events-none ${
+                variant === 'overlay' ? 'opacity-55' : ''
+              }`}
+            >
+              {Array.from({ length: thumbCount }).map((_, idx) => (
+                <img
+                  key={idx}
+                  src={clip.thumbnails![idx % clip.thumbnails!.length]}
+                  alt=""
+                  draggable={false}
+                  style={tileWidthStyle}
+                  className="h-full object-cover shrink-0 border-r border-black/30"
+                />
+              ))}
+            </div>
+          )}
 
         {variant === 'video' && (!clip.thumbnails || clip.thumbnails.length === 0) && (
           <div className="absolute inset-0 flex opacity-45 pointer-events-none">
             {Array.from({ length: thumbCount }).map((_, idx) => (
               <div
                 key={idx}
-                className="h-full w-12 shrink-0 border-r border-black/40 bg-gradient-to-br from-[#2B3648] to-[#141A24]"
+                style={tileWidthStyle}
+                className="h-full shrink-0 border-r border-black/40 bg-gradient-to-br from-[#2B3648] to-[#141A24]"
               />
             ))}
           </div>
@@ -947,8 +1046,11 @@ const ClipStrip = React.memo(function ClipStrip({
           </div>
         )}
 
-        {/* Clip Header Row + Instant Drag Grip when Selected */}
-        <div className="relative z-[2] px-2 pt-0.5 flex items-center justify-between gap-1">
+        {/* Clip Header Row + Instant Drag Grip when Selected (follows visible edge past 6s) */}
+        <div
+          style={{ paddingLeft: `${8 + labelShiftPx}px` }}
+          className="relative z-[2] pr-2 pt-0.5 flex items-center justify-between gap-1"
+        >
           <div className="flex items-center gap-0.5 min-w-0">
             {isSelected && !isLocked && (
               <button

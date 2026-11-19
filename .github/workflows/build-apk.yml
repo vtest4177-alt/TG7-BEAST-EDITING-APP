@@ -11,24 +11,23 @@ jobs:
 
     steps:
       - name: Checkout TG7 Editor Workspace
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
 
       - name: Build TG7 Editor Web Studio Bundle
         run: |
-          npm ci
+          if [ -f package-lock.json ]; then npm ci; else npm install --no-audit --no-fund; fi
           npm run build
           rm -rf android-app/app/src/main/assets
           mkdir -p android-app/app/src/main/assets
           cp -r dist/* android-app/app/src/main/assets/
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
@@ -42,7 +41,7 @@ jobs:
           fi
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v6
+        uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
 
@@ -59,7 +58,7 @@ jobs:
           cp "$APK_PATH" dist-apk/TG7-Editor-com.tg7.editor-Android13-16.apk
 
       - name: Upload TG7 Editor APK Artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: TG7-Editor-APK
           path: dist-apk/TG7-Editor-com.tg7.editor-Android13-16.apk

@@ -22,7 +22,7 @@ import {
   loadGoogleFont,
   MemeLibraryItem,
 } from './data/assetsCatalog';
-import { fetchRemoteFileAsFile } from './data/onlineLibraries';
+import { fetchRemoteFileAsFile, OnlineTemplateItem } from './data/onlineLibraries';
 import {
   generateStockThumbnailDataUrl,
   getProjectDuration,
@@ -110,9 +110,13 @@ export default function App() {
       mediaElementsRef.current.set(clip.id, img);
     } else if (clip.sourceType === 'local-video') {
       const vid = document.createElement('video');
-      vid.preload = 'metadata';
+      vid.preload = 'auto';
       vid.playsInline = true;
+      if (clip.mediaUrl.startsWith('http://') || clip.mediaUrl.startsWith('https://')) {
+        vid.crossOrigin = 'anonymous';
+      }
       vid.src = clip.mediaUrl;
+      vid.load();
       mediaElementsRef.current.set(clip.id, vid);
     } else if (clip.sourceType === 'local-audio') {
       const aud = new Audio(clip.mediaUrl);
@@ -240,37 +244,45 @@ export default function App() {
     }
     let rafId = 0;
     let lastTs = performance.now();
+    let accDt = 0;
 
     const step = (now: number) => {
-      const dt = Math.min(0.05, (now - lastTs) / 1000);
+      const frameDt = Math.min(0.05, (now - lastTs) / 1000);
       lastTs = now;
-      setProjects((prevList) =>
-        prevList.map((prev) => {
-          if (prev.id !== activeProjectId || !prev.isPlaying) return prev;
-          const maxDur = getProjectDuration(prev);
-          const nextTime = prev.playheadSec + dt;
+      accDt += frameDt;
 
-          // Trigger Meme SFX when playhead enters sfx clip
-          prev.clips.forEach((c) => {
-            if (
-              c.sourceType === 'meme-sfx' &&
-              c.sfxId &&
-              nextTime >= c.startSec &&
-              nextTime <= c.startSec + 0.2 &&
-              !triggeredSfxRef.current.has(c.id)
-            ) {
-              triggeredSfxRef.current.add(c.id);
-              playMemeSfx(c.sfxId);
+      // Throttle React tree commits (~30fps) so large HD/4K videos never lag scrolling/UI
+      if (accDt >= 0.032) {
+        const dt = accDt;
+        accDt = 0;
+        setProjects((prevList) =>
+          prevList.map((prev) => {
+            if (prev.id !== activeProjectId || !prev.isPlaying) return prev;
+            const maxDur = getProjectDuration(prev);
+            const nextTime = prev.playheadSec + dt;
+
+            // Trigger Meme SFX when playhead enters sfx clip
+            prev.clips.forEach((c) => {
+              if (
+                c.sourceType === 'meme-sfx' &&
+                c.sfxId &&
+                nextTime >= c.startSec &&
+                nextTime <= c.startSec + 0.2 &&
+                !triggeredSfxRef.current.has(c.id)
+              ) {
+                triggeredSfxRef.current.add(c.id);
+                playMemeSfx(c.sfxId);
+              }
+            });
+
+            if (nextTime >= maxDur) {
+              triggeredSfxRef.current.clear();
+              return { ...prev, playheadSec: 0, isPlaying: false };
             }
-          });
-
-          if (nextTime >= maxDur) {
-            triggeredSfxRef.current.clear();
-            return { ...prev, playheadSec: 0, isPlaying: false };
-          }
-          return { ...prev, playheadSec: nextTime };
-        })
-      );
+            return { ...prev, playheadSec: nextTime };
+          })
+        );
+      }
       rafId = requestAnimationFrame(step);
     };
 
@@ -382,10 +394,7 @@ export default function App() {
         })),
     };
 
-    const existingMedia = mediaElementsRef.current.get(selectedClip.id);
-    if (existingMedia) {
-      mediaElementsRef.current.set(rightClipId, existingMedia);
-    }
+    bindMediaElementForClip(rightClip);
 
     commitProjectChange((prev) => ({
       ...prev,
@@ -410,10 +419,7 @@ export default function App() {
         id: `${newId}-kf-${i}`,
       })),
     };
-    const existingMedia = mediaElementsRef.current.get(selectedClip.id);
-    if (existingMedia) {
-      mediaElementsRef.current.set(newId, existingMedia);
-    }
+    bindMediaElementForClip(clone);
     commitProjectChange((prev) => ({
       ...prev,
       selectedClipId: newId,
@@ -820,22 +826,38 @@ export default function App() {
         vid.preload = 'metadata';
         vid.playsInline = true;
         vid.src = url;
-        vid.onloadedmetadata = async () => {
+        vid.onloadedmetadata = () => {
           const rawDur = Number.isFinite(vid.duration) && vid.duration > 0 ? vid.duration : 5.0;
-          const clampedDur = Math.max(1, Math.min(120, rawDur));
-          const thumbnails = await extractVideoThumbnails(url, clampedDur, 6);
+          const clampedDur = Math.max(1, Math.min(1800, rawDur));
           const asset: MediaAsset = {
             id: assetId,
             name: file.name,
             kind: 'video',
             url,
             durationSec: clampedDur,
-            thumbnails,
+            thumbnails: [],
           };
           setDeviceAssets((prev) => [asset, ...prev]);
           if (autoAppendAsOverlay) {
             appendGalleryItemsToProject(project.id, [{ kind: 'asset', asset }], true);
           }
+
+          // Extract timeline thumbnails lazily in background so large 100MB+ videos never freeze import
+          const thumbCount = Math.min(10, Math.max(4, Math.round(clampedDur / 4)));
+          void extractVideoThumbnails(url, clampedDur, thumbCount).then((thumbnails) => {
+            if (thumbnails.length === 0) return;
+            setDeviceAssets((prev) =>
+              prev.map((a) => (a.id === assetId ? { ...a, thumbnails } : a))
+            );
+            setProjects((prevList) =>
+              prevList.map((proj) => ({
+                ...proj,
+                clips: proj.clips.map((c) =>
+                  c.assetId === assetId ? { ...c, thumbnails } : c
+                ),
+              }))
+            );
+          });
         };
       }
     });
@@ -964,9 +986,13 @@ export default function App() {
               mediaElementsRef.current.set(clipId, img);
             } else if (asset.kind === 'video') {
               const vid = document.createElement('video');
-              vid.preload = 'metadata';
+              vid.preload = 'auto';
               vid.playsInline = true;
+              if (asset.url.startsWith('http://') || asset.url.startsWith('https://')) {
+                vid.crossOrigin = 'anonymous';
+              }
               vid.src = asset.url;
+              vid.load();
               mediaElementsRef.current.set(clipId, vid);
             } else if (asset.kind === 'audio') {
               const aud = new Audio(asset.url);
@@ -1226,6 +1252,177 @@ export default function App() {
     setScreen('editor');
   };
 
+  const handleLaunchOnlineTemplate = async (tpl: OnlineTemplateItem) => {
+    setUndoStack([]);
+    setRedoStack([]);
+
+    await loadGoogleFont({
+      name: tpl.fontFamily,
+      category: 'Gaming',
+      googleFamily: tpl.fontFamily.replace(/\s+/g, '+'),
+      previewText: tpl.headline,
+    }).catch(() => undefined);
+
+    const base = createBlankProject(tpl.title, tpl.aspectRatio, 60);
+    const mainTrack = base.tracks.find((t) => t.type === 'video') ?? base.tracks[0];
+    const overlayTrack = base.tracks.find((t) => t.type === 'overlay') ?? base.tracks[1];
+    const audioTrack = base.tracks.find((t) => t.type === 'audio') ?? base.tracks[2];
+
+    const vidFile = await fetchRemoteFileAsFile(
+      tpl.remoteVideoUrl,
+      `${tpl.id}.mp4`,
+      tpl.videoUrl,
+      'video/mp4'
+    );
+    const vidUrl = URL.createObjectURL(vidFile);
+    const vidAssetId = `asset-tpl-${Date.now()}`;
+    void saveMediaBlobToDraftDb(vidAssetId, vidFile);
+
+    const probedDur = await new Promise<number>((resolve) => {
+      const probe = document.createElement('video');
+      probe.preload = 'metadata';
+      probe.src = vidUrl;
+      probe.onloadedmetadata = () =>
+        resolve(Number.isFinite(probe.duration) && probe.duration > 0 ? probe.duration : tpl.durationSec);
+      probe.onerror = () => resolve(tpl.durationSec);
+      window.setTimeout(() => resolve(tpl.durationSec), 4000);
+    });
+
+    const vidClipId = `clip-tplv-${Date.now()}`;
+    const vidEl = document.createElement('video');
+    vidEl.preload = 'auto';
+    vidEl.playsInline = true;
+    vidEl.src = vidUrl;
+    vidEl.load();
+    mediaElementsRef.current.set(vidClipId, vidEl);
+
+    const mainDur = Math.max(3, Math.min(20, probedDur));
+    const recipe = CREATOR_TEXT_RECIPES[0];
+
+    const mainClip: Clip = {
+      id: vidClipId,
+      trackId: mainTrack.id,
+      name: tpl.title,
+      sourceType: 'local-video',
+      mediaUrl: vidUrl,
+      assetId: vidAssetId,
+      thumbnails: tpl.thumbUrl ? [tpl.thumbUrl] : [],
+      startSec: 0,
+      durationSec: Math.round(mainDur * 10) / 10,
+      trimStartSec: 0,
+      volume: 0.75,
+      effect: { type: tpl.effectType as VideoEffectType, intensity: 75 },
+      transitionIn: { type: tpl.transitionType as TransitionType, durationSec: 0.5 },
+      chromaKey: { enabled: false, targetHex: '#00FF00', similarity: 40, smoothness: 15 },
+      speedRamp: {
+        preset: tpl.id.includes('velocity') ? 'velocity-jump' : 'normal',
+        points: (
+          tpl.id.includes('velocity')
+            ? SPEED_PRESETS['velocity-jump'].points
+            : SPEED_PRESETS.normal.points
+        ).map((p) => ({ ...p })),
+      },
+      keyframes: [],
+    };
+
+    const txtClipId = `clip-tplt-${Date.now() + 1}`;
+    const txtClip: Clip = {
+      id: txtClipId,
+      trackId: overlayTrack.id,
+      name: `Text · ${tpl.headline}`,
+      sourceType: 'demo-text',
+      textContent: tpl.headline,
+      fontFamily: tpl.fontFamily,
+      fontSize: 84,
+      textAnimation: 'bounceIn',
+      ...recipe.patch,
+      textColor: tpl.textColor,
+      textGradientColor1: tpl.textColor,
+      startSec: 0.2,
+      durationSec: Math.min(3.6, mainDur),
+      trimStartSec: 0,
+      volume: 0,
+      chromaKey: { enabled: false, targetHex: '#00FF00', similarity: 40, smoothness: 15 },
+      speedRamp: {
+        preset: 'normal',
+        points: SPEED_PRESETS.normal.points.map((p) => ({ ...p })),
+      },
+      keyframes: [
+        { id: `${txtClipId}-kf`, timeOffset: 0, x: 0, y: -4, scale: 1.0, rotation: 0, opacity: 1 },
+      ],
+    };
+
+    const nextClips: Clip[] = [mainClip, txtClip];
+
+    if (tpl.remoteAudioUrl) {
+      try {
+        const audFile = await fetchRemoteFileAsFile(
+          tpl.remoteAudioUrl,
+          `${tpl.id}.mp3`,
+          tpl.audioUrl,
+          'audio/mpeg'
+        );
+        const audUrl = URL.createObjectURL(audFile);
+        const audAssetId = `asset-tpla-${Date.now()}`;
+        void saveMediaBlobToDraftDb(audAssetId, audFile);
+        const audClipId = `clip-tpla-${Date.now() + 2}`;
+        const audEl = new Audio(audUrl);
+        audEl.preload = 'auto';
+        mediaElementsRef.current.set(audClipId, audEl);
+
+        nextClips.push({
+          id: audClipId,
+          trackId: audioTrack.id,
+          name: tpl.audioTitle || `${tpl.title} Audio`,
+          sourceType: 'local-audio',
+          mediaUrl: audUrl,
+          assetId: audAssetId,
+          waveform: fallbackWaveform(48),
+          startSec: 0,
+          durationSec: Math.round(mainDur * 10) / 10,
+          trimStartSec: 0,
+          volume: 0.85,
+          chromaKey: { enabled: false, targetHex: '#00FF00', similarity: 40, smoothness: 15 },
+          speedRamp: {
+            preset: 'normal',
+            points: SPEED_PRESETS.normal.points.map((p) => ({ ...p })),
+          },
+          keyframes: [],
+        });
+      } catch {
+        // video + text template still launches cleanly even if audio endpoint fails
+      }
+    }
+
+    const newProj: ProjectState = {
+      ...base,
+      playheadSec: 0.5,
+      selectedClipId: vidClipId,
+      clips: nextClips,
+    };
+
+    setProjects((prev) => [newProj, ...prev]);
+    setActiveProjectId(newProj.id);
+    setActiveSheet('effects');
+    setScreen('editor');
+
+    void extractVideoThumbnails(vidUrl, mainDur, 6).then((thumbs) => {
+      if (thumbs.length === 0) return;
+      setProjects((prevList) =>
+        prevList.map((p) =>
+          p.id === newProj.id
+            ? {
+                ...p,
+                clips: p.clips.map((c) =>
+                  c.id === vidClipId ? { ...c, thumbnails: thumbs } : c
+                ),
+              }
+            : p
+        )
+      );
+    });
+  };
+
   if (screen === 'home') {
     return (
       <>
@@ -1253,6 +1450,7 @@ export default function App() {
             setScreen('editor');
           }}
           onLaunchPreset={handleLaunchPreset}
+          onLaunchOnlineTemplate={handleLaunchOnlineTemplate}
           onDuplicateProject={handleDuplicateProject}
           onDeleteProject={(projId) => {
             setProjects((prev) => {
@@ -1621,18 +1819,52 @@ export default function App() {
             const target = prev.clips.find((c) => c.id === clipId);
             if (!target || target.trackId !== mainTrack.id) return prev;
 
-            // Pack Main Track clips cleanly end-to-end so cuts never drift apart
+            // Sort main track by clip center (start + duration/2) so dragging past neighbor's center swaps cleanly!
             const mainSorted = prev.clips
               .filter((c) => c.trackId === mainTrack.id)
-              .sort((a, b) => a.startSec - b.startSec);
+              .sort((a, b) => a.startSec + a.durationSec / 2 - (b.startSec + b.durationSec / 2));
             let cursor = 0;
             const packedMap = new Map<string, number>();
             for (const mc of mainSorted) {
               packedMap.set(mc.id, Math.round(cursor * 100) / 100);
               cursor += mc.durationSec;
             }
+            const nextPlayhead = packedMap.has(clipId)
+              ? Math.max(0, packedMap.get(clipId)! + 0.05)
+              : prev.playheadSec;
             return {
               ...prev,
+              playheadSec: nextPlayhead,
+              clips: prev.clips.map((c) =>
+                packedMap.has(c.id) ? { ...c, startSec: packedMap.get(c.id)! } : c
+              ),
+            };
+          }, true);
+        }}
+        onReorderMainClip={(clipId, direction) => {
+          commitProjectChange((prev) => {
+            const mainTrack = prev.tracks.find((t) => t.type === 'video');
+            if (!mainTrack) return prev;
+            const mainSorted = prev.clips
+              .filter((c) => c.trackId === mainTrack.id)
+              .sort((a, b) => a.startSec - b.startSec);
+            const idx = mainSorted.findIndex((c) => c.id === clipId);
+            const swapIdx = idx + direction;
+            if (idx < 0 || swapIdx < 0 || swapIdx >= mainSorted.length) return prev;
+
+            const reordered = [...mainSorted];
+            const [moved] = reordered.splice(idx, 1);
+            reordered.splice(swapIdx, 0, moved);
+
+            let cursor = 0;
+            const packedMap = new Map<string, number>();
+            for (const mc of reordered) {
+              packedMap.set(mc.id, Math.round(cursor * 100) / 100);
+              cursor += mc.durationSec;
+            }
+            return {
+              ...prev,
+              playheadSec: Math.max(0, (packedMap.get(clipId) ?? 0) + 0.05),
               clips: prev.clips.map((c) =>
                 packedMap.has(c.id) ? { ...c, startSec: packedMap.get(c.id)! } : c
               ),

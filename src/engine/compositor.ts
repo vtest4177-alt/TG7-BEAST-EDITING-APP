@@ -28,6 +28,37 @@ let cachedTransFromCtx: CanvasRenderingContext2D | null = null;
 let cachedTransToCanvas: HTMLCanvasElement | null = null;
 let cachedTransToCtx: CanvasRenderingContext2D | null = null;
 const svgImageCache = new Map<string, HTMLImageElement>();
+const videoLastFrameCache = new Map<string, HTMLCanvasElement>();
+
+function updateCachedVideoFrame(
+  key: string,
+  el: HTMLVideoElement,
+  fitMode: 'contain' | 'cover',
+  width: number,
+  height: number
+): void {
+  let cache = videoLastFrameCache.get(key);
+  if (!cache) {
+    cache = document.createElement('canvas');
+    videoLastFrameCache.set(key, cache);
+  }
+  if (cache.width !== width || cache.height !== height) {
+    cache.width = width;
+    cache.height = height;
+  }
+  const cctx = cache.getContext('2d');
+  if (!cctx) return;
+  const mediaW = el.videoWidth || width;
+  const mediaH = el.videoHeight || height;
+  const fitScale =
+    fitMode === 'cover'
+      ? Math.max(width / mediaW, height / mediaH)
+      : Math.min(width / mediaW, height / mediaH);
+  const drawW = mediaW * fitScale;
+  const drawH = mediaH * fitScale;
+  cctx.clearRect(0, 0, width, height);
+  cctx.drawImage(el, (width - drawW) / 2, (height - drawH) / 2, drawW, drawH);
+}
 
 function getOffscreenTarget(
   width: number,
@@ -833,14 +864,39 @@ function renderClipRawToCanvas(
       drawAnimatedText(targetCtx, width, height, clip, localTime);
     } else if (clip.sourceType === 'local-video' || clip.sourceType === 'local-image') {
       const el = mediaElements.get(clip.id);
-      if (el && (el instanceof HTMLVideoElement || el instanceof HTMLImageElement)) {
-        const isReady =
-          el instanceof HTMLVideoElement ? el.readyState >= 2 : el.complete && el.naturalWidth > 0;
-        if (isReady) {
-          const mediaW =
-            el instanceof HTMLVideoElement ? el.videoWidth || width : el.naturalWidth || width;
-          const mediaH =
-            el instanceof HTMLVideoElement ? el.videoHeight || height : el.naturalHeight || height;
+      if (el && el instanceof HTMLVideoElement) {
+        const fitMode = clip.crop?.fitMode === 'cover' ? 'cover' : 'contain';
+        const primaryKey = clip.id;
+        const fallbackKey = clip.assetId || clip.mediaUrl || clip.id;
+        if (el.readyState >= 2 && el.videoWidth > 0) {
+          const mediaW = el.videoWidth || width;
+          const mediaH = el.videoHeight || height;
+          const fitScale =
+            fitMode === 'cover'
+              ? Math.max(width / mediaW, height / mediaH)
+              : Math.min(width / mediaW, height / mediaH);
+          const drawW = mediaW * fitScale;
+          const drawH = mediaH * fitScale;
+          targetCtx.drawImage(el, (width - drawW) / 2, (height - drawH) / 2, drawW, drawH);
+          // Cache latest decoded frame unless mid-seek so buffering past 6s never shows black
+          if (!el.seeking) {
+            try {
+              updateCachedVideoFrame(primaryKey, el, fitMode, width, height);
+            } catch {
+              // ignore tainted canvas cache
+            }
+          }
+        } else {
+          const cachedFrame =
+            videoLastFrameCache.get(primaryKey) ?? videoLastFrameCache.get(fallbackKey);
+          if (cachedFrame && cachedFrame.width > 0 && cachedFrame.height > 0) {
+            targetCtx.drawImage(cachedFrame, 0, 0, width, height);
+          }
+        }
+      } else if (el && el instanceof HTMLImageElement) {
+        if (el.complete && el.naturalWidth > 0) {
+          const mediaW = el.naturalWidth || width;
+          const mediaH = el.naturalHeight || height;
           const isCover = clip.crop?.fitMode === 'cover';
           const fitScale = isCover
             ? Math.max(width / mediaW, height / mediaH)

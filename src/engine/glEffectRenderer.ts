@@ -15,6 +15,193 @@ type ShaderEffectKey = Exclude<
 >;
 
 const EFFECT_SHADERS: Record<ShaderEffectKey, string> = {
+  'rgb-split-pro': `
+    precision highp float;
+    varying vec2 v_uv;
+    uniform sampler2D u_tex;
+    uniform float u_time;
+    uniform float u_intensity;
+    void main() {
+      float beat = pow(abs(sin(u_time * 5.2)), 4.0);
+      vec2 center = v_uv - 0.5;
+      float zoom = 1.0 - 0.04 * beat * u_intensity;
+      vec2 baseUv = center * zoom + 0.5;
+      float disp = (0.012 + 0.032 * beat) * u_intensity;
+      vec2 dir = normalize(center + vec2(0.0001));
+      float r = texture2D(u_tex, clamp(baseUv + dir * disp, 0.0, 1.0)).r;
+      float g = texture2D(u_tex, clamp(baseUv, 0.0, 1.0)).g;
+      float b = texture2D(u_tex, clamp(baseUv - dir * disp, 0.0, 1.0)).b;
+      float a = texture2D(u_tex, clamp(baseUv, 0.0, 1.0)).a;
+      vec3 col = vec3(r, g, b) * (1.0 + 0.14 * beat * u_intensity);
+      gl_FragColor = vec4(clamp(col, 0.0, 1.0), a);
+    }
+  `,
+  'anime-speedlines': `
+    precision highp float;
+    varying vec2 v_uv;
+    uniform sampler2D u_tex;
+    uniform float u_time;
+    uniform float u_intensity;
+    float hash(float n) { return fract(sin(n) * 43758.5453); }
+    void main() {
+      vec2 p = v_uv - 0.5;
+      float r = length(p);
+      float ang = atan(p.y, p.x);
+      float sector = floor((ang + 3.1415926) * 18.0);
+      float streak = step(0.62, hash(sector + floor(u_time * 18.0)));
+      float radialMask = smoothstep(0.22, 0.62, r);
+      vec4 base = texture2D(u_tex, v_uv);
+      vec3 punched = smoothstep(0.04, 0.94, base.rgb);
+      vec3 col = mix(punched, vec3(0.95, 0.98, 1.0), streak * radialMask * 0.72 * u_intensity);
+      gl_FragColor = vec4(mix(base.rgb, col, u_intensity), base.a);
+    }
+  `,
+  'light-leak-flare': `
+    precision highp float;
+    varying vec2 v_uv;
+    uniform sampler2D u_tex;
+    uniform float u_time;
+    uniform float u_intensity;
+    void main() {
+      vec4 base = texture2D(u_tex, v_uv);
+      float sx = 0.5 + 0.42 * sin(u_time * 1.15);
+      float sy = 0.5 + 0.25 * cos(u_time * 0.85);
+      float orb = smoothstep(0.65, 0.0, distance(v_uv, vec2(sx, sy)));
+      float bar = exp(-abs(v_uv.y - sy) * 18.0) * smoothstep(0.8, 0.0, abs(v_uv.x - sx));
+      vec3 warm = vec3(1.0, 0.48, 0.15) * orb * 0.75 + vec3(0.95, 0.25, 0.65) * (1.0 - v_uv.x) * 0.28 + vec3(0.45, 0.85, 1.0) * bar * 0.85;
+      gl_FragColor = vec4(clamp(base.rgb + warm * u_intensity, 0.0, 1.0), base.a);
+    }
+  `,
+  'film-burn-halation': `
+    precision highp float;
+    varying vec2 v_uv;
+    uniform sampler2D u_tex;
+    uniform float u_time;
+    uniform float u_intensity;
+    float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    void main() {
+      vec4 base = texture2D(u_tex, v_uv);
+      float r = 0.014 * u_intensity;
+      vec3 halo = (
+        texture2D(u_tex, clamp(v_uv + vec2(r, 0.0), 0.0, 1.0)).rgb +
+        texture2D(u_tex, clamp(v_uv - vec2(r, 0.0), 0.0, 1.0)).rgb +
+        texture2D(u_tex, clamp(v_uv + vec2(0.0, r), 0.0, 1.0)).rgb +
+        texture2D(u_tex, clamp(v_uv - vec2(0.0, r), 0.0, 1.0)).rgb
+      ) * 0.25;
+      vec3 redHalation = max(halo - 0.52, vec3(0.0)) * vec3(2.2, 0.48, 0.15) * u_intensity;
+      float burn = smoothstep(0.35, 0.0, v_uv.x) * (0.4 + 0.6 * abs(sin(u_time * 1.4))) * u_intensity;
+      float grain = (hash(v_uv * 220.0 + u_time * 31.0) - 0.5) * 0.075 * u_intensity;
+      vec3 col = base.rgb * vec3(1.06, 0.99, 0.92) + redHalation + vec3(1.0, 0.38, 0.08) * burn * 0.45 + grain;
+      gl_FragColor = vec4(clamp(col, 0.0, 1.0), base.a);
+    }
+  `,
+  'sparkle-bling': `
+    precision highp float;
+    varying vec2 v_uv;
+    uniform sampler2D u_tex;
+    uniform float u_time;
+    uniform float u_intensity;
+    float hash(vec2 p) { return fract(sin(dot(p, vec2(41.1, 289.7))) * 43758.5453); }
+    void main() {
+      vec4 base = texture2D(u_tex, v_uv);
+      vec2 grid = floor(v_uv * 10.0);
+      vec2 loc = fract(v_uv * 10.0) - 0.5;
+      float rnd = hash(grid);
+      float twinkle = pow(max(0.0, sin(u_time * 4.5 + rnd * 18.0)), 8.0) * step(0.68, rnd);
+      float crossStar = exp(-abs(loc.x) * 26.0) * exp(-abs(loc.y) * 5.0) + exp(-abs(loc.y) * 26.0) * exp(-abs(loc.x) * 5.0);
+      float luma = dot(base.rgb, vec3(0.299, 0.587, 0.114));
+      float spark = crossStar * twinkle * (0.4 + luma * 1.2) * u_intensity;
+      gl_FragColor = vec4(clamp(base.rgb + vec3(1.0, 0.96, 0.8) * spark, 0.0, 1.0), base.a);
+    }
+  `,
+  'cyber-hud-scan': `
+    precision highp float;
+    varying vec2 v_uv;
+    uniform sampler2D u_tex;
+    uniform float u_time;
+    uniform float u_intensity;
+    void main() {
+      vec4 base = texture2D(u_tex, v_uv);
+      vec2 p = abs(v_uv - 0.5);
+      float ring = smoothstep(0.008, 0.0, abs(length(p) - 0.28));
+      float tick = smoothstep(0.005, 0.0, abs(p.x - 0.36)) * step(0.24, p.y) * step(p.y, 0.36)
+                 + smoothstep(0.005, 0.0, abs(p.y - 0.36)) * step(0.24, p.x) * step(p.x, 0.36);
+      float scan = smoothstep(0.025, 0.0, abs(v_uv.y - fract(u_time * 0.5)));
+      vec3 hud = vec3(0.0, 0.9, 1.0) * (ring + tick + scan * 0.7) * u_intensity;
+      vec3 tint = mix(base.rgb, base.rgb * vec3(0.84, 1.06, 1.16), u_intensity * 0.55);
+      gl_FragColor = vec4(clamp(tint + hud, 0.0, 1.0), base.a);
+    }
+  `,
+  'manga-ink': `
+    precision highp float;
+    varying vec2 v_uv;
+    uniform sampler2D u_tex;
+    uniform vec2 u_resolution;
+    uniform float u_intensity;
+    void main() {
+      vec2 px = 1.6 / max(u_resolution, vec2(1.0));
+      vec4 base = texture2D(u_tex, v_uv);
+      vec3 c1 = texture2D(u_tex, v_uv + vec2(px.x, 0.0)).rgb;
+      vec3 c2 = texture2D(u_tex, v_uv + vec2(0.0, px.y)).rgb;
+      float edge = smoothstep(0.14, 0.36, length(base.rgb - c1) + length(base.rgb - c2));
+      float luma = dot(base.rgb, vec3(0.299, 0.587, 0.114));
+      float tone = step(0.45, luma) * 0.75 + step(0.75, luma) * 0.25;
+      float hatch = step(0.5, fract((v_uv.x + v_uv.y) * 90.0)) * 0.2;
+      float bw = clamp((luma < 0.35 ? hatch : tone) - edge * 0.9, 0.0, 1.0);
+      gl_FragColor = vec4(mix(base.rgb, vec3(bw), u_intensity), base.a);
+    }
+  `,
+  'dreamy-glow': `
+    precision highp float;
+    varying vec2 v_uv;
+    uniform sampler2D u_tex;
+    uniform float u_intensity;
+    void main() {
+      vec4 base = texture2D(u_tex, v_uv);
+      float o = 0.012 * u_intensity;
+      vec3 blur = (
+        texture2D(u_tex, clamp(v_uv + vec2(o, o), 0.0, 1.0)).rgb +
+        texture2D(u_tex, clamp(v_uv + vec2(-o, o), 0.0, 1.0)).rgb +
+        texture2D(u_tex, clamp(v_uv + vec2(o, -o), 0.0, 1.0)).rgb +
+        texture2D(u_tex, clamp(v_uv + vec2(-o, -o), 0.0, 1.0)).rgb
+      ) * 0.25;
+      vec3 orton = 1.0 - (1.0 - base.rgb) * (1.0 - blur * 0.72);
+      gl_FragColor = vec4(mix(base.rgb, clamp(orton, 0.0, 1.0), u_intensity * 0.88), base.a);
+    }
+  `,
+  'chrome-liquid': `
+    precision highp float;
+    varying vec2 v_uv;
+    uniform sampler2D u_tex;
+    uniform float u_time;
+    uniform float u_intensity;
+    void main() {
+      vec4 base = texture2D(u_tex, v_uv);
+      float lum = dot(base.rgb, vec3(0.299, 0.587, 0.114));
+      float metallic = sin(lum * 9.424 + u_time * 1.5) * 0.35 + smoothstep(0.15, 0.85, lum);
+      vec3 chrome = mix(vec3(0.12, 0.18, 0.26), vec3(0.92, 0.97, 1.0), clamp(metallic, 0.0, 1.0));
+      gl_FragColor = vec4(mix(base.rgb, chrome, u_intensity), base.a);
+    }
+  `,
+  'vhs-camcorder': `
+    precision highp float;
+    varying vec2 v_uv;
+    uniform sampler2D u_tex;
+    uniform float u_time;
+    uniform float u_intensity;
+    float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+    void main() {
+      float headSwitch = v_uv.y < 0.055 ? (hash(vec2(floor(u_time * 24.0), v_uv.y)) - 0.5) * 0.06 * u_intensity : 0.0;
+      float jitter = sin(v_uv.y * 42.0 + u_time * 15.0) * 0.0025 * u_intensity + headSwitch;
+      vec2 uv = clamp(v_uv + vec2(jitter, 0.0), 0.0, 1.0);
+      float r = texture2D(u_tex, clamp(uv + vec2(0.008 * u_intensity, 0.0), 0.0, 1.0)).r;
+      float g = texture2D(u_tex, uv).g;
+      float b = texture2D(u_tex, clamp(uv - vec2(0.01 * u_intensity, 0.0), 0.0, 1.0)).b;
+      float grain = (hash(uv * 190.0 + u_time * 29.0) - 0.5) * 0.09 * u_intensity;
+      vec3 col = clamp(vec3(r, g, b) * 1.04 + vec3(0.02, 0.01, 0.03) + grain, 0.0, 1.0);
+      gl_FragColor = vec4(col, 1.0);
+    }
+  `,
   'rgb-glitch': `
     precision highp float;
     varying vec2 v_uv;

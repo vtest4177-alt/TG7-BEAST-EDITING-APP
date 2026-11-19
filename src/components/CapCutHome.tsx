@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import {
   Copy,
@@ -6,14 +6,17 @@ import {
   Flame,
   FolderOpen,
   Gauge,
+  Globe,
   Laugh,
   Layers,
+  Loader2,
   Play,
   Plus,
   Sparkles,
   Trash2,
   Wand2,
 } from 'lucide-react';
+import { fetchOnlineTemplates, OnlineTemplateItem } from '../data/onlineLibraries';
 import { AspectRatio, ProjectState } from '../types/editor';
 
 export type QuickPresetKind =
@@ -30,6 +33,7 @@ interface CapCutHomeProps {
   onOpenNewProjectPicker: (aspectRatio: AspectRatio) => void;
   onCreateBlankProject: (aspectRatio: AspectRatio) => void;
   onLaunchPreset: (preset: QuickPresetKind, aspectRatio: AspectRatio) => void;
+  onLaunchOnlineTemplate?: (tpl: OnlineTemplateItem) => Promise<void>;
   onDuplicateProject: (projectId: string) => void;
   onDeleteProject: (projectId: string) => void;
 }
@@ -58,7 +62,7 @@ const PRO_PRESETS: {
   {
     id: 'glitch-intro',
     title: 'Cyber Intro FX',
-    desc: 'Animated title + 44 WebGL shaders',
+    desc: 'Animated title + 54 WebGL shaders',
     accent: '#A78BFA',
     icon: Wand2,
   },
@@ -71,8 +75,8 @@ const PRO_PRESETS: {
   },
   {
     id: 'meme-vault',
-    title: 'Memes & Sound FX',
-    desc: 'Soundboard + instant viral SFX',
+    title: 'Online Memes & SFX',
+    desc: 'MyInstants + Mixkit live audio/VFX',
     accent: '#F59E0B',
     icon: Laugh,
   },
@@ -85,10 +89,31 @@ export function CapCutHome({
   onOpenNewProjectPicker,
   onCreateBlankProject,
   onLaunchPreset,
+  onLaunchOnlineTemplate,
   onDuplicateProject,
   onDeleteProject,
 }: CapCutHomeProps) {
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('9:16');
+  const [onlineTemplates, setOnlineTemplates] = useState<OnlineTemplateItem[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(true);
+  const [busyTplId, setBusyTplId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchOnlineTemplates()
+      .then((list) => {
+        if (!cancelled) setOnlineTemplates(list);
+      })
+      .catch(() => {
+        // offline fallback gracefully handled by Quick Launch presets below
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingTemplates(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <div className="h-screen w-screen bg-[#000000] text-[#F5F5F7] flex flex-col overflow-hidden">
@@ -135,7 +160,7 @@ export function CapCutHome({
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-xs font-mono text-[#00CAE0]">
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>44 WEBGL FX · 225 GLSL TRANSITIONS · AUTO-DRAFT PROTECTION</span>
+                <span>54 WEBGL FX · 225 GLSL TRANSITIONS · LIVE ONLINE MATERIALS</span>
               </div>
               <h1 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
                 Create Your Next Viral Edit
@@ -175,6 +200,88 @@ export function CapCutHome({
             </button>
           </div>
         </motion.section>
+
+        {/* Live Online Creator Templates (Mixkit HD Videos + Real Beats + Shaders) */}
+        {(loadingTemplates || onlineTemplates.length > 0) && onLaunchOnlineTemplate && (
+          <motion.section
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.38, delay: 0.04, ease: [0.22, 1, 0.36, 1] }}
+            aria-label="Live online creator templates"
+            className="space-y-3"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Globe className="w-3.5 h-3.5 text-[#00CAE0]" />
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-[#F5F5F7]">
+                  Online Viral Templates (HD Video + Music)
+                </h2>
+              </div>
+              {loadingTemplates && (
+                <div className="flex items-center gap-1.5 text-[11px] text-[#8E8E98]">
+                  <Loader2 className="w-3 h-3 animate-spin text-[#00CAE0]" />
+                  <span>Fetching live...</span>
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {onlineTemplates.map((tpl) => {
+                const isBusy = busyTplId === tpl.id;
+                return (
+                  <button
+                    key={tpl.id}
+                    type="button"
+                    disabled={Boolean(busyTplId)}
+                    onClick={async () => {
+                      setBusyTplId(tpl.id);
+                      try {
+                        await onLaunchOnlineTemplate(tpl);
+                      } finally {
+                        setBusyTplId(null);
+                      }
+                    }}
+                    className="rounded-xl bg-[#0F0F14] hover:bg-[#16161E] border border-[#1E1E28] hover:border-[#00CAE0]/60 overflow-hidden text-left transition-all cursor-pointer group flex flex-col"
+                  >
+                    <div className="relative h-28 w-full bg-[#09090D] overflow-hidden">
+                      {tpl.thumbUrl && (
+                        <img
+                          src={tpl.thumbUrl}
+                          alt={tpl.title}
+                          loading="lazy"
+                          className="w-full h-full object-cover opacity-85 group-hover:scale-105 transition-transform duration-300"
+                        />
+                      )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
+                      <span
+                        className="absolute top-2 left-2 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-black/75 border"
+                        style={{ color: tpl.accentHex, borderColor: `${tpl.accentHex}55` }}
+                      >
+                        {tpl.tag} · {tpl.aspectRatio}
+                      </span>
+                      <div className="absolute bottom-2 left-2.5 right-2.5 flex items-center justify-between gap-2">
+                        <span className="text-xs font-bold text-white truncate">{tpl.title}</span>
+                        <span className="px-2 py-1 rounded-md bg-[#00CAE0] text-black text-[10px] font-bold flex items-center gap-1 shrink-0">
+                          {isBusy ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <>
+                              <Play className="w-2.5 h-2.5 fill-black" />
+                              <span>Use</span>
+                            </>
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="px-3 py-2 text-[11px] text-[#8E8E98] truncate">
+                      {tpl.desc}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </motion.section>
+        )}
 
         {/* Creator Quick-Start Templates */}
         <motion.section

@@ -1,5 +1,6 @@
 import 'dotenv/config';
-import express, { Request, Response } from 'express';
+import express from 'express';
+import type { Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -350,6 +351,11 @@ async function searchMixkitVfx(query: string) {
     laser: 'laser',
     rain: 'rain',
     abstract: 'abstract',
+    cyberpunk: 'cyberpunk',
+    background: 'background',
+    cinematic: 'background',
+    gaming: 'neon',
+    sparks: 'particles',
   };
   let target = 'https://mixkit.co/free-stock-video/glitch/';
   if (q) {
@@ -454,6 +460,175 @@ async function searchDaFont(query: string) {
   }
 
   return items;
+}
+
+interface OnlineTemplateItem {
+  id: string;
+  title: string;
+  tag: string;
+  desc: string;
+  accentHex: string;
+  aspectRatio: '9:16' | '16:9' | '1:1';
+  effectType: string;
+  transitionType: string;
+  headline: string;
+  fontFamily: string;
+  textColor: string;
+  videoUrl: string;
+  remoteVideoUrl: string;
+  thumbUrl: string;
+  audioUrl?: string;
+  remoteAudioUrl?: string;
+  audioTitle?: string;
+  durationSec: number;
+}
+
+let cachedOnlineTemplates: OnlineTemplateItem[] | null = null;
+let cachedOnlineTemplatesAt = 0;
+
+async function buildOnlineTemplates(): Promise<OnlineTemplateItem[]> {
+  if (cachedOnlineTemplates && Date.now() - cachedOnlineTemplatesAt < 1000 * 60 * 30) {
+    return cachedOnlineTemplates;
+  }
+
+  const [cyberVids, fireVids, particleVids, glitchVids, hiphopTracks, edmTracks, cinemaTracks] =
+    await Promise.all([
+      searchMixkitVfx('cyberpunk').catch(() => []),
+      searchMixkitVfx('fire').catch(() => []),
+      searchMixkitVfx('particles').catch(() => []),
+      searchMixkitVfx('glitch').catch(() => []),
+      searchMixkitMusic('hip-hop').catch(() => []),
+      searchMixkitMusic('electronic').catch(() => []),
+      searchMixkitMusic('cinematic').catch(() => []),
+    ]);
+
+  const specs = [
+    {
+      id: 'tpl-phonk-drift',
+      title: 'Phonk Beat Edit',
+      tag: 'VIRAL REEL',
+      desc: 'HD Cyber clip + Phonk beat + Shake + RGB Split',
+      accentHex: '#00CAE0',
+      aspectRatio: '9:16' as const,
+      effectType: 'rgb-split-pro',
+      transitionType: 'CrossZoom',
+      headline: 'NO BRAKES',
+      fontFamily: 'Anton',
+      textColor: '#FFE600',
+      vid: cyberVids[0] || glitchVids[0],
+      aud: hiphopTracks[0],
+      durationSec: 6.5,
+    },
+    {
+      id: 'tpl-anime-velocity',
+      title: 'Anime Velocity Cut',
+      tag: 'VELOCITY',
+      desc: 'Speedlines shader + Ramp curve + Hyper track',
+      accentHex: '#F472B6',
+      aspectRatio: '9:16' as const,
+      effectType: 'anime-speedlines',
+      transitionType: 'DirectionalWarp',
+      headline: 'MAXIMUM POWER',
+      fontFamily: 'Bangers',
+      textColor: '#FFFFFF',
+      vid: glitchVids[0] || cyberVids[1],
+      aud: edmTracks[0] || hiphopTracks[1],
+      durationSec: 6.0,
+    },
+    {
+      id: 'tpl-fire-trailer',
+      title: 'Action Fire Opener',
+      tag: 'CINEMATIC',
+      desc: 'Ember sparks footage + Kodak Halation + Epic score',
+      accentHex: '#F97316',
+      aspectRatio: '16:9' as const,
+      effectType: 'film-burn-halation',
+      transitionType: 'BurnThrough',
+      headline: 'RISE AGAIN',
+      fontFamily: 'Bebas Neue',
+      textColor: '#FF9E2C',
+      vid: fireVids[0] || particleVids[0],
+      aud: cinemaTracks[0],
+      durationSec: 7.0,
+    },
+    {
+      id: 'tpl-dreamy-aesthetic',
+      title: 'Aesthetic Gold Vlog',
+      tag: 'TRENDING',
+      desc: 'Particles overlay + Light Leak Flare + Lo-Fi groove',
+      accentHex: '#FBBF24',
+      aspectRatio: '9:16' as const,
+      effectType: 'light-leak-flare',
+      transitionType: 'DreamyZoom',
+      headline: 'GOLDEN HOURS',
+      fontFamily: 'Syne',
+      textColor: '#FFF3C4',
+      vid: particleVids[0] || fireVids[1],
+      aud: cinemaTracks[1] || hiphopTracks[2],
+      durationSec: 7.5,
+    },
+    {
+      id: 'tpl-cyber-hud',
+      title: 'Cyber HUD Montage',
+      tag: 'GAMING',
+      desc: 'Target HUD Scanner + Glitch FX + Bass EDM',
+      accentHex: '#34D399',
+      aspectRatio: '16:9' as const,
+      effectType: 'cyber-hud-scan',
+      transitionType: 'GlitchMemories',
+      headline: 'SYSTEM LOCKED',
+      fontFamily: 'Orbitron',
+      textColor: '#00CAE0',
+      vid: cyberVids[1] || glitchVids[1],
+      aud: edmTracks[1] || edmTracks[0],
+      durationSec: 6.5,
+    },
+    {
+      id: 'tpl-vhs-90s',
+      title: '90s VHS Camcorder',
+      tag: 'RETRO',
+      desc: 'Analog camcorder bleed + Vintage grain + Chill beat',
+      accentHex: '#A78BFA',
+      aspectRatio: '1:1' as const,
+      effectType: 'vhs-camcorder',
+      transitionType: 'FilmBurn',
+      headline: 'REC 1998',
+      fontFamily: 'Rubik Glitch',
+      textColor: '#FFFFFF',
+      vid: glitchVids[2] || cyberVids[2],
+      aud: hiphopTracks[3] || cinemaTracks[0],
+      durationSec: 6.0,
+    },
+  ];
+
+  const built: OnlineTemplateItem[] = specs
+    .filter((s) => Boolean(s.vid))
+    .map((s) => ({
+      id: s.id,
+      title: s.title,
+      tag: s.tag,
+      desc: s.desc,
+      accentHex: s.accentHex,
+      aspectRatio: s.aspectRatio,
+      effectType: s.effectType,
+      transitionType: s.transitionType,
+      headline: s.headline,
+      fontFamily: s.fontFamily,
+      textColor: s.textColor,
+      videoUrl: s.vid.videoUrl,
+      remoteVideoUrl: s.vid.remoteVideoUrl,
+      thumbUrl: s.vid.thumbUrl,
+      audioUrl: s.aud?.previewUrl,
+      remoteAudioUrl: s.aud?.remoteUrl,
+      audioTitle: s.aud?.title,
+      durationSec: s.durationSec,
+    }));
+
+  if (built.length > 0) {
+    cachedOnlineTemplates = built;
+    cachedOnlineTemplatesAt = Date.now();
+  }
+  return built;
 }
 
 async function startServer() {
@@ -590,6 +765,18 @@ async function startServer() {
       res.json({ googleFonts: googleList, dafontFonts: dafontList });
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : 'Font search failed' });
+    }
+  });
+
+  // 5. Live Online Creator Templates & Viral Preset Packs
+  app.get('/api/templates/online', async (_req: Request, res: Response) => {
+    try {
+      const templates = await buildOnlineTemplates();
+      res.json({ templates });
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Online templates fetch failed',
+      });
     }
   });
 

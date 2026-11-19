@@ -409,3 +409,114 @@ export async function fetchIconifySvgMarkup(iconId: string, colorHex?: string): 
   iconifyMarkupCache.set(key, markup);
   return markup;
 }
+
+export interface OnlineTemplateItem {
+  id: string;
+  title: string;
+  tag: string;
+  desc: string;
+  accentHex: string;
+  aspectRatio: '9:16' | '16:9' | '1:1';
+  effectType: string;
+  transitionType: string;
+  headline: string;
+  fontFamily: string;
+  textColor: string;
+  videoUrl: string;
+  remoteVideoUrl: string;
+  thumbUrl: string;
+  audioUrl?: string;
+  remoteAudioUrl?: string;
+  audioTitle?: string;
+  durationSec: number;
+}
+
+let cachedOnlineTemplates: OnlineTemplateItem[] | null = null;
+
+export async function fetchOnlineTemplates(): Promise<OnlineTemplateItem[]> {
+  if (cachedOnlineTemplates && cachedOnlineTemplates.length > 0) {
+    return cachedOnlineTemplates;
+  }
+  if (isServerApiAvailable()) {
+    const res = await fetch('/api/templates/online');
+    if (!res.ok) throw new Error('Failed to load online templates.');
+    const json = (await res.json()) as { templates?: OnlineTemplateItem[] };
+    const list = json.templates ?? [];
+    if (list.length > 0) cachedOnlineTemplates = list;
+    return list;
+  }
+
+  // Standalone APK offline-friendly fallback using Mixkit direct Android bridge
+  const [cyber, fire, glitch, music] = await Promise.all([
+    searchOnlineVfx('cyberpunk').catch(() => []),
+    searchOnlineVfx('fire').catch(() => []),
+    searchOnlineVfx('glitch').catch(() => []),
+    searchOnlineSounds('phonk', 'all').catch(() => []),
+  ]);
+
+  const templates: OnlineTemplateItem[] = [
+    cyber[0] && {
+      id: 'tpl-phonk-drift',
+      title: 'Phonk Beat Edit',
+      tag: 'VIRAL REEL',
+      desc: 'HD Cyber clip + Phonk beat + RGB Split Beat',
+      accentHex: '#00CAE0',
+      aspectRatio: '9:16',
+      effectType: 'rgb-split-pro',
+      transitionType: 'CrossZoom',
+      headline: 'NO BRAKES',
+      fontFamily: 'Anton',
+      textColor: '#FFE600',
+      videoUrl: cyber[0].videoUrl,
+      remoteVideoUrl: cyber[0].remoteVideoUrl,
+      thumbUrl: cyber[0].thumbUrl,
+      audioUrl: music[0]?.previewUrl,
+      remoteAudioUrl: music[0]?.remoteUrl,
+      audioTitle: music[0]?.title,
+      durationSec: 6.5,
+    },
+    glitch[0] && {
+      id: 'tpl-anime-velocity',
+      title: 'Anime Velocity Cut',
+      tag: 'VELOCITY',
+      desc: 'Speedlines shader + Ramp curve + Hyper track',
+      accentHex: '#F472B6',
+      aspectRatio: '9:16',
+      effectType: 'anime-speedlines',
+      transitionType: 'DirectionalWarp',
+      headline: 'MAXIMUM POWER',
+      fontFamily: 'Bangers',
+      textColor: '#FFFFFF',
+      videoUrl: glitch[0].videoUrl,
+      remoteVideoUrl: glitch[0].remoteVideoUrl,
+      thumbUrl: glitch[0].thumbUrl,
+      audioUrl: music[1]?.previewUrl,
+      remoteAudioUrl: music[1]?.remoteUrl,
+      audioTitle: music[1]?.title,
+      durationSec: 6.0,
+    },
+    fire[0] && {
+      id: 'tpl-fire-trailer',
+      title: 'Action Fire Opener',
+      tag: 'CINEMATIC',
+      desc: 'Ember sparks footage + Kodak Halation + Score',
+      accentHex: '#F97316',
+      aspectRatio: '16:9',
+      effectType: 'film-burn-halation',
+      transitionType: 'BurnThrough',
+      headline: 'RISE AGAIN',
+      fontFamily: 'Bebas Neue',
+      textColor: '#FF9E2C',
+      videoUrl: fire[0].videoUrl,
+      remoteVideoUrl: fire[0].remoteVideoUrl,
+      thumbUrl: fire[0].thumbUrl,
+      audioUrl: music[2]?.previewUrl,
+      remoteAudioUrl: music[2]?.remoteUrl,
+      audioTitle: music[2]?.title,
+      durationSec: 7.0,
+    },
+  ].filter(Boolean) as OnlineTemplateItem[];
+
+  if (templates.length > 0) cachedOnlineTemplates = templates;
+  return templates;
+}

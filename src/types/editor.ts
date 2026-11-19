@@ -25,6 +25,16 @@ export type SpeedPreset =
 
 export type VideoEffectType =
   | 'none'
+  | 'rgb-split-pro'
+  | 'anime-speedlines'
+  | 'light-leak-flare'
+  | 'film-burn-halation'
+  | 'sparkle-bling'
+  | 'cyber-hud-scan'
+  | 'manga-ink'
+  | 'dreamy-glow'
+  | 'chrome-liquid'
+  | 'vhs-camcorder'
   | 'rgb-glitch'
   | 'chromatic-aberration'
   | 'crt-scanlines'

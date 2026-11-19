@@ -280,6 +280,7 @@ export const CREATOR_TEXT_RECIPES: CreatorTextRecipe[] = [
 
 export type EffectCategory =
   | 'All'
+  | 'Trending Viral'
   | 'Glitch & Cyber'
   | 'Lens & Warp'
   | 'Glow & Neon'
@@ -295,6 +296,17 @@ export interface VideoEffectCatalogItem {
 
 export const VIDEO_EFFECTS: VideoEffectCatalogItem[] = [
   { id: 'none', label: 'Original', desc: 'Raw frame', category: 'Film LUTs' },
+  // Trending Viral
+  { id: 'rgb-split-pro', label: 'RGB Split Beat', desc: 'Beat zoom prism burst', category: 'Trending Viral' },
+  { id: 'anime-speedlines', label: 'Anime Speedlines', desc: 'Manga velocity lines', category: 'Trending Viral' },
+  { id: 'light-leak-flare', label: 'Light Leak Flare', desc: 'Anamorphic lens sweep', category: 'Trending Viral' },
+  { id: 'film-burn-halation', label: 'Kodak Halation', desc: '35mm red glow + grain', category: 'Trending Viral' },
+  { id: 'sparkle-bling', label: 'Bling Sparkle', desc: '4-point highlight stars', category: 'Trending Viral' },
+  { id: 'cyber-hud-scan', label: 'Cyber HUD Lock', desc: 'Target reticle scanner', category: 'Trending Viral' },
+  { id: 'manga-ink', label: 'Manga Comic Ink', desc: 'Bold anime ink outlines', category: 'Trending Viral' },
+  { id: 'dreamy-glow', label: 'Orton Dreamy', desc: 'Pro highlight glow', category: 'Trending Viral' },
+  { id: 'chrome-liquid', label: 'Liquid Chrome', desc: 'Metallic foil wave', category: 'Trending Viral' },
+  { id: 'vhs-camcorder', label: '90s Camcorder', desc: 'Head switch + grain', category: 'Trending Viral' },
   // Glitch & Cyber
   { id: 'rgb-glitch', label: 'RGB Glitch', desc: 'WebGL tear split', category: 'Glitch & Cyber' },
   { id: 'chromatic-aberration', label: 'RGB Prism Edge', desc: 'Optic fringe', category: 'Glitch & Cyber' },
