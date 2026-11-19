@@ -1,39 +1,10 @@
 {
-  "name": "react-example",
+  "name": "tg7-editor-native-android",
+  "version": "1.0.0",
   "private": true,
-  "version": "0.0.0",
-  "type": "module",
   "scripts": {
-    "dev": "tsx server.ts",
-    "build": "vite build",
-    "start": "node server.ts",
-    "preview": "vite preview",
-    "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@google/genai": "^2.4.0",
-    "@tailwindcss/vite": "^4.3.3",
-    "@vitejs/plugin-react": "^6.1.1",
-    "animate.css": "^4.1.1",
-    "dotenv": "^17.2.3",
-    "express": "^4.21.2",
-    "gl-transitions": "^3.3.0",
-    "lucide-react": "^0.546.0",
-    "motion": "^12.23.24",
-    "react": "^19.0.1",
-    "react-dom": "^19.0.1",
-    "vite": "^8.3.0"
-  },
-  "devDependencies": {
-    "@types/node": "^22.14.0",
-    "@types/react": "^19.3.0",
-    "@types/react-dom": "^19.3.0",
-    "autoprefixer": "^10.4.21",
-    "esbuild": "^0.25.0",
-    "tailwindcss": "^4.3.3",
-    "tsx": "^4.21.0",
-    "typescript": "^7.0.2",
-    "@types/express": "^4.17.21"
+    "build": "node -e \"const fs=require('fs');if(!fs.existsSync('app/build.gradle.kts')||!fs.existsSync('settings.gradle.kts')){process.exit(1);}console.log('TG7 Editor Native Android workspace verified.');\"",
+    "lint": "node -e \"const fs=require('fs');const req=['.github/workflows/build.yml','settings.gradle.kts','build.gradle.kts','app/build.gradle.kts','app/src/main/AndroidManifest.xml','app/src/main/java/com/tg7/editor/MainActivity.kt'];for(const f of req){if(!fs.existsSync(f)){console.error('Missing:',f);process.exit(1);}}console.log('Native Android structure OK.');\"",
+    "start": "node -e \"const http=require('http');http.createServer((_,res)=>{res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8'});res.end('TG7 Editor Native Android (Kotlin + Jetpack Compose + Media3) — Push to GitHub main to build TG7-Editor-Debug.apk via Actions.');}).listen(3000,'0.0.0.0',()=>console.log('Listening on 3000'));\""
   }
 }

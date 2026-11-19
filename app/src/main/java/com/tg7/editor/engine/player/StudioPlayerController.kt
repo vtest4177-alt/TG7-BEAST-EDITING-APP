@@ -1,0 +1,184 @@
+package com.tg7.editor.engine.player
+
+import android.content.Context
+import android.net.Uri
+import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
+import com.tg7.editor.model.MediaKind
+import com.tg7.editor.model.TimelineClip
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+
+class StudioPlayerController(
+    context: Context,
+    private val scope: CoroutineScope
+) {
+    val player: ExoPlayer = ExoPlayer.Builder(context.applicationContext).build()
+
+    private var currentClips: List<TimelineClip> = emptyList()
+    private var clipOffsetsMs: List<Long> = emptyList()
+    private var tickerJob: Job? = null
+
+    private val _isPlaying = MutableStateFlow(false)
+    val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
+
+    private val _globalPositionMs = MutableStateFlow(0L)
+    val globalPositionMs: StateFlow<Long> = _globalPositionMs.asStateFlow()
+
+    private val _playerError = MutableStateFlow<String?>(null)
+    val playerError: StateFlow<String?> = _playerError.asStateFlow()
+
+    private val listener = object : Player.Listener {
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            _isPlaying.value = isPlaying
+            if (isPlaying) startTicker() else stopTicker()
+        }
+
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            if (playbackState == Player.STATE_ENDED) {
+                _isPlaying.value = false
+                stopTicker()
+            }
+        }
+
+        override fun onPlayerError(error: PlaybackException) {
+            _isPlaying.value = false
+            stopTicker()
+            _playerError.value =
+                "Playback error (${error.errorCodeName}): ${error.localizedMessage ?: "Unsupported media"}"
+        }
+    }
+
+    init {
+        player.addListener(listener)
+    }
+
+    fun clearError() {
+        _playerError.value = null
+    }
+
+    fun setTimelineClips(clips: List<TimelineClip>, preservePositionMs: Long? = null) {
+        currentClips = clips
+        val offsets = ArrayList<Long>(clips.size)
+        var acc = 0L
+        clips.forEach { clip ->
+            offsets.add(acc)
+            acc += clip.activeDurationMs
+        }
+        clipOffsetsMs = offsets
+
+        if (clips.isEmpty()) {
+            player.pause()
+            player.clearMediaItems()
+            _globalPositionMs.value = 0L
+            return
+        }
+
+        val mediaItems = clips.map { clip ->
+            val builder = MediaItem.Builder()
+                .setMediaId(clip.id)
+                .setUri(Uri.parse(clip.uriString))
+
+            if (clip.kind == MediaKind.IMAGE) {
+                builder.setImageDurationMs(clip.activeDurationMs)
+            } else {
+                builder.setClippingConfiguration(
+                    MediaItem.ClippingConfiguration.Builder()
+                        .setStartPositionMs(clip.trimStartMs)
+                        .setEndPositionMs(clip.trimEndMs)
+                        .build()
+                )
+            }
+            builder.build()
+        }
+
+        val targetPos = (preservePositionMs ?: _globalPositionMs.value)
+            .coerceIn(0L, acc.coerceAtLeast(0L))
+        val (targetIdx, localMs) = mapGlobalToClip(targetPos)
+
+        _playerError.value = null
+        player.setMediaItems(mediaItems, targetIdx, localMs)
+        player.prepare()
+        _globalPositionMs.value = targetPos
+    }
+
+    fun togglePlayPause() {
+        if (currentClips.isEmpty()) return
+        if (player.isPlaying) {
+            player.pause()
+        } else {
+            val total = totalDurationMs()
+            if (player.playbackState == Player.STATE_ENDED || _globalPositionMs.value >= total - 40L) {
+                seekToGlobal(0L)
+            }
+            player.play()
+        }
+    }
+
+    fun pause() {
+        if (player.isPlaying) {
+            player.pause()
+        }
+    }
+
+    fun seekToGlobal(globalMs: Long) {
+        if (currentClips.isEmpty()) {
+            _globalPositionMs.value = 0L
+            return
+        }
+        val clamped = globalMs.coerceIn(0L, totalDurationMs())
+        val (idx, localMs) = mapGlobalToClip(clamped)
+        player.seekTo(idx, localMs)
+        _globalPositionMs.value = clamped
+    }
+
+    fun totalDurationMs(): Long = currentClips.sumOf { it.activeDurationMs }
+
+    private fun mapGlobalToClip(globalMs: Long): Pair<Int, Long> {
+        if (currentClips.isEmpty()) return 0 to 0L
+        for (i in currentClips.indices) {
+            val start = clipOffsetsMs[i]
+            val dur = currentClips[i].activeDurationMs
+            if (globalMs <= start + dur || i == currentClips.lastIndex) {
+                val local = (globalMs - start).coerceIn(0L, (dur - 10L).coerceAtLeast(0L))
+                return i to local
+            }
+        }
+        return 0 to 0L
+    }
+
+    private fun startTicker() {
+        if (tickerJob?.isActive == true) return
+        tickerJob = scope.launch(Dispatchers.Main.immediate) {
+            while (isActive && player.isPlaying) {
+                val idx = player.currentMediaItemIndex
+                if (idx in clipOffsetsMs.indices) {
+                    val base = clipOffsetsMs[idx]
+                    val local = player.currentPosition.coerceAtLeast(0L)
+                    _globalPositionMs.value = (base + local).coerceIn(0L, totalDurationMs())
+                }
+                delay(16L)
+            }
+        }
+    }
+
+    private fun stopTicker() {
+        tickerJob?.cancel()
+        tickerJob = null
+    }
+
+    fun release() {
+        stopTicker()
+        player.removeListener(listener)
+        player.release()
+    }
+}
