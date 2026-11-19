@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("com.google.devtools.ksp")
 }
 
 android {
@@ -11,8 +12,8 @@ android {
         applicationId = "com.tg7.editor"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0-phase1"
+        versionCode = 2
+        versionName = "2.0.0-phase2"
     }
 
     buildFeatures {
@@ -71,13 +72,19 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
 
-    // Media3 1.3.1 (Apache 2.0): ExoPlayer preview, Transformer hardware MP4 export, Effects
+    // Media3 1.3.1 (Apache 2.0): ExoPlayer preview, Transformer hardware MP4 export, Overlay Effects
     val media3Version = "1.3.1"
     implementation("androidx.media3:media3-exoplayer:$media3Version")
     implementation("androidx.media3:media3-ui:$media3Version")
     implementation("androidx.media3:media3-transformer:$media3Version")
     implementation("androidx.media3:media3-effect:$media3Version")
     implementation("androidx.media3:media3-common:$media3Version")
+
+    // Room 2.6.1 (Apache 2.0): Local SQLite auto-save + crash recovery
+    val roomVersion = "2.6.1"
+    implementation("androidx.room:room-runtime:$roomVersion")
+    implementation("androidx.room:room-ktx:$roomVersion")
+    ksp("androidx.room:room-compiler:$roomVersion")
 
     // Coil 2.6.0 (Apache 2.0): Native image & video frame thumbnails
     implementation("io.coil-kt:coil-compose:2.6.0")

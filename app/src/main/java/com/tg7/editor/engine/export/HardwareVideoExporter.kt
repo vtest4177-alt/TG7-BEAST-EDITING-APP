@@ -2,6 +2,11 @@ package com.tg7.editor.engine.export
 
 import android.content.ContentValues
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Typeface
 import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
@@ -13,7 +18,11 @@ import androidx.core.content.FileProvider
 import androidx.media3.common.Effect
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
+import androidx.media3.effect.BitmapOverlay
+import androidx.media3.effect.OverlayEffect
+import androidx.media3.effect.OverlaySettings
 import androidx.media3.effect.Presentation
+import androidx.media3.effect.TextureOverlay
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.EditedMediaItem
 import androidx.media3.transformer.EditedMediaItemSequence
@@ -22,11 +31,13 @@ import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.ProgressHolder
 import androidx.media3.transformer.Transformer
-import com.tg7.editor.model.CanvasAspectRatio
+import com.google.common.collect.ImmutableList
+import com.tg7.editor.model.EditorProject
 import com.tg7.editor.model.ExportResolution
 import com.tg7.editor.model.ExportState
 import com.tg7.editor.model.MediaKind
-import com.tg7.editor.model.TimelineClip
+import com.tg7.editor.model.StickerLayer
+import com.tg7.editor.model.TextLayer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -36,15 +47,14 @@ class HardwareVideoExporter(context: Context) {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var activeTransformer: Transformer? = null
     private var progressPollRunnable: Runnable? = null
+    private val allocatedOverlayBitmaps = mutableListOf<Bitmap>()
 
     fun startExport(
-        projectName: String,
-        clips: List<TimelineClip>,
-        aspectRatio: CanvasAspectRatio,
+        project: EditorProject,
         resolution: ExportResolution,
         onStateChanged: (ExportState) -> Unit
     ) {
-        if (clips.isEmpty()) {
+        if (project.clips.isEmpty()) {
             onStateChanged(ExportState.Failed("Add at least one video or photo before exporting."))
             return
         }
@@ -53,14 +63,14 @@ class HardwareVideoExporter(context: Context) {
         onStateChanged(ExportState.Exporting(progressPercent = 0, resolution = resolution))
 
         val exportDir = File(appContext.cacheDir, "exports").apply { mkdirs() }
-        val safeTitle = projectName.replace(Regex("[^A-Za-z0-9_-]"), "_").take(24).ifBlank { "TG7_Edit" }
+        val safeTitle = project.name.replace(Regex("[^A-Za-z0-9_-]"), "_").take(24).ifBlank { "TG7_Edit" }
         val fileName = "${safeTitle}_${resolution.label}_${System.currentTimeMillis()}.mp4"
         val outFile = File(exportDir, fileName)
         if (outFile.exists()) outFile.delete()
 
         mainHandler.post {
             try {
-                val (targetW, targetH) = aspectRatio.outputDimensions(resolution.shortEdgePx)
+                val (targetW, targetH) = project.aspectRatio.outputDimensions(resolution.shortEdgePx)
                 val videoEffects: List<Effect> = listOf(
                     Presentation.createForWidthAndHeight(
                         targetW,
@@ -70,7 +80,7 @@ class HardwareVideoExporter(context: Context) {
                 )
                 val itemEffects = Effects(emptyList(), videoEffects)
 
-                val editedItems = clips.map { clip ->
+                val editedVideoItems = project.clips.map { clip ->
                     val itemBuilder = MediaItem.Builder()
                         .setUri(Uri.parse(clip.uriString))
 
@@ -96,8 +106,45 @@ class HardwareVideoExporter(context: Context) {
                     editedBuilder.build()
                 }
 
-                val sequence = EditedMediaItemSequence(editedItems)
-                val composition = Composition.Builder(sequence).build()
+                val sequences = mutableListOf(EditedMediaItemSequence(editedVideoItems))
+
+                if (project.audioClips.isNotEmpty()) {
+                    val editedAudioItems = project.audioClips.map { audio ->
+                        val audioItem = MediaItem.Builder()
+                            .setUri(Uri.parse(audio.uriString))
+                            .setClippingConfiguration(
+                                MediaItem.ClippingConfiguration.Builder()
+                                    .setStartPositionMs(audio.trimStartMs)
+                                    .setEndPositionMs(audio.trimEndMs)
+                                    .build()
+                            )
+                            .build()
+                        EditedMediaItem.Builder(audioItem)
+                            .setRemoveVideo(true)
+                            .build()
+                    }
+                    sequences.add(EditedMediaItemSequence(editedAudioItems))
+                }
+
+                val textureOverlays = buildList<TextureOverlay> {
+                    project.textLayers.forEach { layer ->
+                        add(createTimedTextOverlay(layer, targetH))
+                    }
+                    project.stickerLayers.forEach { sticker ->
+                        add(createTimedStickerOverlay(sticker, targetH))
+                    }
+                }
+
+                val compositionBuilder = Composition.Builder(sequences)
+                if (textureOverlays.isNotEmpty()) {
+                    compositionBuilder.setEffects(
+                        Effects(
+                            emptyList(),
+                            listOf(OverlayEffect(ImmutableList.copyOf(textureOverlays)))
+                        )
+                    )
+                }
+                val composition = compositionBuilder.build()
 
                 val transformer = Transformer.Builder(appContext)
                     .setVideoMimeType(MimeTypes.VIDEO_H264)
@@ -105,6 +152,7 @@ class HardwareVideoExporter(context: Context) {
                     .addListener(object : Transformer.Listener {
                         override fun onCompleted(composition: Composition, exportResult: ExportResult) {
                             stopProgressPoll()
+                            recycleOverlayBitmaps()
                             activeTransformer = null
                             Thread {
                                 val galleryUri = saveMp4ToGallery(outFile, fileName)
@@ -133,6 +181,7 @@ class HardwareVideoExporter(context: Context) {
                             exportException: ExportException
                         ) {
                             stopProgressPoll()
+                            recycleOverlayBitmaps()
                             activeTransformer = null
                             onStateChanged(
                                 ExportState.Failed(
@@ -148,10 +197,115 @@ class HardwareVideoExporter(context: Context) {
                 startProgressPoll(transformer, resolution, onStateChanged)
             } catch (t: Throwable) {
                 stopProgressPoll()
+                recycleOverlayBitmaps()
                 activeTransformer = null
                 onStateChanged(ExportState.Failed(t.localizedMessage ?: "Failed to start hardware encoder"))
             }
         }
+    }
+
+    private fun createTimedTextOverlay(layer: TextLayer, targetHeight: Int): BitmapOverlay {
+        val textPx = (layer.fontSizeSp * (targetHeight / 720f) * 2.1f).coerceIn(28f, 160f)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = layer.colorHex.toInt()
+            textSize = textPx
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            setShadowLayer(8f, 0f, 3f, Color.BLACK)
+        }
+        val strokePaint = Paint(paint).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 6f
+            color = Color.BLACK
+        }
+
+        val text = layer.text.ifBlank { "TG7" }
+        val textW = paint.measureText(text).toInt().coerceAtLeast(32)
+        val fm = paint.fontMetrics
+        val textH = (fm.descent - fm.ascent).toInt().coerceAtLeast(32)
+
+        val pad = 28
+        val bmp = Bitmap.createBitmap(textW + pad * 2, textH + pad * 2, Bitmap.Config.ARGB_8888)
+        allocatedOverlayBitmaps.add(bmp)
+        val canvas = Canvas(bmp)
+        val baseline = pad - fm.ascent
+        canvas.drawText(text, pad.toFloat(), baseline, strokePaint)
+        canvas.drawText(text, pad.toFloat(), baseline, paint)
+
+        val startUs = layer.startTimeMs * 1000L
+        val endUs = (layer.startTimeMs + layer.durationMs) * 1000L
+        val ndcX = (layer.posXFraction * 2f - 1f).coerceIn(-0.92f, 0.92f)
+        val ndcY = (1f - layer.posYFraction * 2f).coerceIn(-0.92f, 0.92f)
+
+        val visibleSettings = OverlaySettings.Builder()
+            .setAlphaScale(1f)
+            .setBackgroundFrameAnchor(ndcX, ndcY)
+            .build()
+        val hiddenSettings = OverlaySettings.Builder()
+            .setAlphaScale(0f)
+            .build()
+
+        return object : BitmapOverlay() {
+            override fun getBitmap(presentationTimeUs: Long): Bitmap = bmp
+            override fun getOverlaySettings(presentationTimeUs: Long): OverlaySettings {
+                return if (presentationTimeUs in startUs..endUs) visibleSettings else hiddenSettings
+            }
+        }
+    }
+
+    private fun createTimedStickerOverlay(sticker: StickerLayer, targetHeight: Int): BitmapOverlay {
+        val sizePx = (sticker.sizeDp * (targetHeight / 720f) * 2.2f).toInt().coerceIn(72, 260)
+        val bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+        allocatedOverlayBitmaps.add(bmp)
+        val canvas = Canvas(bmp)
+
+        val badgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.argb(170, 12, 16, 26)
+        }
+        val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = sizePx * 0.06f
+            color = sticker.tintHex.toInt()
+        }
+        val glyphPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = sticker.tintHex.toInt()
+            textSize = sizePx * 0.52f
+            textAlign = Paint.Align.CENTER
+            typeface = Typeface.DEFAULT_BOLD
+        }
+        val cx = sizePx / 2f
+        val cy = sizePx / 2f
+        val r = sizePx * 0.44f
+        canvas.drawCircle(cx, cy, r, badgePaint)
+        canvas.drawCircle(cx, cy, r, ringPaint)
+        val textY = cy - (glyphPaint.descent() + glyphPaint.ascent()) / 2f
+        canvas.drawText(sticker.preset.glyph, cx, textY, glyphPaint)
+
+        val startUs = sticker.startTimeMs * 1000L
+        val endUs = (sticker.startTimeMs + sticker.durationMs) * 1000L
+        val ndcX = (sticker.posXFraction * 2f - 1f).coerceIn(-0.92f, 0.92f)
+        val ndcY = (1f - sticker.posYFraction * 2f).coerceIn(-0.92f, 0.92f)
+
+        val visibleSettings = OverlaySettings.Builder()
+            .setAlphaScale(1f)
+            .setBackgroundFrameAnchor(ndcX, ndcY)
+            .build()
+        val hiddenSettings = OverlaySettings.Builder()
+            .setAlphaScale(0f)
+            .build()
+
+        return object : BitmapOverlay() {
+            override fun getBitmap(presentationTimeUs: Long): Bitmap = bmp
+            override fun getOverlaySettings(presentationTimeUs: Long): OverlaySettings {
+                return if (presentationTimeUs in startUs..endUs) visibleSettings else hiddenSettings
+            }
+        }
+    }
+
+    private fun recycleOverlayBitmaps() {
+        allocatedOverlayBitmaps.forEach { bmp ->
+            if (!bmp.isRecycled) runCatching { bmp.recycle() }
+        }
+        allocatedOverlayBitmaps.clear()
     }
 
     private fun startProgressPoll(
@@ -230,6 +384,7 @@ class HardwareVideoExporter(context: Context) {
         mainHandler.post {
             runCatching { activeTransformer?.cancel() }
             activeTransformer = null
+            recycleOverlayBitmaps()
         }
     }
 

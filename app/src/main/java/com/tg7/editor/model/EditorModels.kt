@@ -1,10 +1,43 @@
 package com.tg7.editor.model
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Bolt
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.EmojiEvents
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.LocalFireDepartment
+import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.rounded.Star
+import androidx.compose.ui.graphics.vector.ImageVector
 import java.util.UUID
 
 enum class MediaKind {
     VIDEO,
     IMAGE
+}
+
+enum class TrackType {
+    VIDEO,
+    AUDIO,
+    TEXT,
+    STICKER
+}
+
+enum class StickerPreset(
+    val label: String,
+    val defaultTintHex: Long,
+    val glyph: String,
+    val icon: ImageVector
+) {
+    STAR("Star", 0xFF00F0FF, "★", Icons.Rounded.Star),
+    FIRE("Flame", 0xFFFF4500, "🔥", Icons.Rounded.LocalFireDepartment),
+    HEART("Heart", 0xFFFF1030, "♥", Icons.Rounded.Favorite),
+    BOLT("Bolt", 0xFFFFD600, "⚡", Icons.Rounded.Bolt),
+    SPARKLE("Glow", 0xFF00F0FF, "✦", Icons.Rounded.AutoAwesome),
+    MUSIC("Beat", 0xFFA855F7, "♪", Icons.Rounded.MusicNote),
+    CHECK("Badge", 0xFF22C55E, "✔", Icons.Rounded.CheckCircle),
+    TROPHY("Win", 0xFFFACC15, "🏆", Icons.Rounded.EmojiEvents)
 }
 
 enum class CanvasAspectRatio(
@@ -56,15 +89,69 @@ data class TimelineClip(
         get() = (trimEndMs - trimStartMs).coerceAtLeast(300L)
 }
 
+data class AudioClip(
+    val id: String = UUID.randomUUID().toString(),
+    val uriString: String,
+    val displayName: String,
+    val startTimeMs: Long = 0L,
+    val sourceDurationMs: Long = 10_000L,
+    val trimStartMs: Long = 0L,
+    val trimEndMs: Long = sourceDurationMs,
+    val volume: Float = 1.0f
+) {
+    val activeDurationMs: Long
+        get() = (trimEndMs - trimStartMs).coerceAtLeast(300L)
+}
+
+data class TextLayer(
+    val id: String = UUID.randomUUID().toString(),
+    val text: String,
+    val startTimeMs: Long = 0L,
+    val durationMs: Long = 3000L,
+    val posXFraction: Float = 0.5f,
+    val posYFraction: Float = 0.5f,
+    val colorHex: Long = 0xFFFFFFFF,
+    val fontSizeSp: Float = 26f
+)
+
+data class StickerLayer(
+    val id: String = UUID.randomUUID().toString(),
+    val preset: StickerPreset = StickerPreset.STAR,
+    val startTimeMs: Long = 0L,
+    val durationMs: Long = 3000L,
+    val posXFraction: Float = 0.5f,
+    val posYFraction: Float = 0.35f,
+    val sizeDp: Float = 56f,
+    val tintHex: Long = preset.defaultTintHex
+)
+
+data class TimelineSelection(
+    val trackType: TrackType,
+    val itemId: String
+)
+
 data class EditorProject(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
     val aspectRatio: CanvasAspectRatio = CanvasAspectRatio.PORTRAIT_9_16,
     val updatedAtMs: Long = System.currentTimeMillis(),
-    val clips: List<TimelineClip> = emptyList()
+    val inActiveSession: Boolean = false,
+    val clips: List<TimelineClip> = emptyList(),
+    val audioClips: List<AudioClip> = emptyList(),
+    val textLayers: List<TextLayer> = emptyList(),
+    val stickerLayers: List<StickerLayer> = emptyList()
 ) {
-    val totalDurationMs: Long
+    val videoDurationMs: Long
         get() = clips.sumOf { it.activeDurationMs }
+
+    val totalDurationMs: Long
+        get() {
+            val maxVideo = videoDurationMs
+            val maxAudio = audioClips.maxOfOrNull { it.startTimeMs + it.activeDurationMs } ?: 0L
+            val maxText = textLayers.maxOfOrNull { it.startTimeMs + it.durationMs } ?: 0L
+            val maxSticker = stickerLayers.maxOfOrNull { it.startTimeMs + it.durationMs } ?: 0L
+            return maxOf(maxVideo, maxAudio, maxText, maxSticker)
+        }
 
     val coverUriString: String?
         get() = clips.firstOrNull()?.uriString

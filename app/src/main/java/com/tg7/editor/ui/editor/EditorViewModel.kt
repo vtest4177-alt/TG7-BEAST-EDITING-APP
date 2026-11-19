@@ -9,13 +9,19 @@ import com.tg7.editor.data.RecentMediaLoader
 import com.tg7.editor.engine.export.HardwareVideoExporter
 import com.tg7.editor.engine.player.StudioPlayerController
 import com.tg7.editor.media.MediaPickerHelper
+import com.tg7.editor.model.AudioClip
 import com.tg7.editor.model.CanvasAspectRatio
 import com.tg7.editor.model.EditorProject
 import com.tg7.editor.model.ExportResolution
 import com.tg7.editor.model.ExportState
 import com.tg7.editor.model.MediaKind
 import com.tg7.editor.model.RecentMediaItem
+import com.tg7.editor.model.StickerLayer
+import com.tg7.editor.model.StickerPreset
+import com.tg7.editor.model.TextLayer
 import com.tg7.editor.model.TimelineClip
+import com.tg7.editor.model.TimelineSelection
+import com.tg7.editor.model.TrackType
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,11 +39,30 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private val _projects = MutableStateFlow<List<EditorProject>>(emptyList())
     val projects: StateFlow<List<EditorProject>> = _projects.asStateFlow()
 
+    private val _recoveryProject = MutableStateFlow<EditorProject?>(null)
+    val recoveryProject: StateFlow<EditorProject?> = _recoveryProject.asStateFlow()
+
     private val _activeProjectId = MutableStateFlow<String?>(null)
     val activeProjectId: StateFlow<String?> = _activeProjectId.asStateFlow()
 
-    private val _selectedClipId = MutableStateFlow<String?>(null)
-    val selectedClipId: StateFlow<String?> = _selectedClipId.asStateFlow()
+    private val _selection = MutableStateFlow<TimelineSelection?>(null)
+    val selection: StateFlow<TimelineSelection?> = _selection.asStateFlow()
+
+    private val _isMultiSelectMode = MutableStateFlow(false)
+    val isMultiSelectMode: StateFlow<Boolean> = _isMultiSelectMode.asStateFlow()
+
+    private val _multiSelectedIds = MutableStateFlow<Set<String>>(emptySet())
+    val multiSelectedIds: StateFlow<Set<String>> = _multiSelectedIds.asStateFlow()
+
+    private val _timelineZoom = MutableStateFlow(1.0f)
+    val timelineZoom: StateFlow<Float> = _timelineZoom.asStateFlow()
+
+    private val undoStack = ArrayDeque<EditorProject>()
+    private val redoStack = ArrayDeque<EditorProject>()
+    private val _canUndo = MutableStateFlow(false)
+    val canUndo: StateFlow<Boolean> = _canUndo.asStateFlow()
+    private val _canRedo = MutableStateFlow(false)
+    val canRedo: StateFlow<Boolean> = _canRedo.asStateFlow()
 
     private val _preferredAspectRatio = MutableStateFlow(CanvasAspectRatio.PORTRAIT_9_16)
     val preferredAspectRatio: StateFlow<CanvasAspectRatio> = _preferredAspectRatio.asStateFlow()
@@ -62,6 +87,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private val _showImportSheet = MutableStateFlow(false)
     val showImportSheet: StateFlow<Boolean> = _showImportSheet.asStateFlow()
 
+    private val _showTextSheet = MutableStateFlow(false)
+    val showTextSheet: StateFlow<Boolean> = _showTextSheet.asStateFlow()
+
+    private val _showStickerSheet = MutableStateFlow(false)
+    val showStickerSheet: StateFlow<Boolean> = _showStickerSheet.asStateFlow()
+
     private val _showTrimPanel = MutableStateFlow(false)
     val showTrimPanel: StateFlow<Boolean> = _showTrimPanel.asStateFlow()
 
@@ -75,10 +106,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     val bannerMessage: StateFlow<String?> = _bannerMessage.asStateFlow()
 
     private var trimSyncJob: Job? = null
+    private var lastContinuousHistoryMs = 0L
 
     init {
         viewModelScope.launch {
             _projects.value = repository.loadProjects()
+            _recoveryProject.value = repository.findRecoveryProject()
             refreshRecentMedia()
             exporter.clearOldExports()
         }
@@ -93,15 +126,21 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         _preferredAspectRatio.value = ratio
     }
 
-    fun cycleActiveAspectRatio() {
-        val proj = activeProject() ?: return
-        val nextRatio = proj.aspectRatio.next()
-        val updatedProjects = _projects.value.map { p ->
-            if (p.id == proj.id) p.copy(aspectRatio = nextRatio, updatedAtMs = System.currentTimeMillis())
-            else p
-        }
-        _projects.value = updatedProjects
-        viewModelScope.launch { repository.saveProjects(updatedProjects) }
+    fun adjustTimelineZoom(factorOrDelta: Float, absolute: Boolean = false) {
+        val next = if (absolute) factorOrDelta else _timelineZoom.value * factorOrDelta
+        _timelineZoom.value = next.coerceIn(0.4f, 2.8f)
+    }
+
+    fun recoverLastSession() {
+        val rec = _recoveryProject.value ?: return
+        _recoveryProject.value = null
+        openProject(rec.id)
+        _bannerMessage.value = "Session restored from Room auto-save."
+    }
+
+    fun dismissRecovery() {
+        _recoveryProject.value = null
+        viewModelScope.launch { repository.markSessionActive(null) }
     }
 
     fun refreshRecentMedia() {
@@ -126,16 +165,22 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             val project = EditorProject(
                 name = "TG7 Edit ${_projects.value.size + 1}",
                 aspectRatio = _preferredAspectRatio.value,
+                inActiveSession = true,
                 clips = probed
             )
             val updated = listOf(project) + _projects.value
             _projects.value = updated
+            clearHistory()
             _activeProjectId.value = project.id
-            _selectedClipId.value = probed.first().id
+            _recoveryProject.value = null
+            _selection.value = TimelineSelection(TrackType.VIDEO, probed.first().id)
+            _multiSelectedIds.value = emptySet()
+            _isMultiSelectMode.value = false
             _showTrimPanel.value = false
             _isFullscreenPreview.value = false
-            playerController.setTimelineClips(probed, preservePositionMs = 0L)
-            repository.saveProjects(updated)
+            playerController.setTimelineMedia(probed, emptyList(), preservePositionMs = 0L)
+            repository.saveProject(project)
+            repository.markSessionActive(project.id)
         }
     }
 
@@ -151,25 +196,38 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val project = EditorProject(
             name = "TG7 Edit ${_projects.value.size + 1}",
             aspectRatio = _preferredAspectRatio.value,
+            inActiveSession = true,
             clips = listOf(clip)
         )
         val updated = listOf(project) + _projects.value
         _projects.value = updated
+        clearHistory()
         _activeProjectId.value = project.id
-        _selectedClipId.value = clip.id
+        _recoveryProject.value = null
+        _selection.value = TimelineSelection(TrackType.VIDEO, clip.id)
+        _multiSelectedIds.value = emptySet()
+        _isMultiSelectMode.value = false
         _showTrimPanel.value = false
         _isFullscreenPreview.value = false
-        playerController.setTimelineClips(project.clips, preservePositionMs = 0L)
-        viewModelScope.launch { repository.saveProjects(updated) }
+        playerController.setTimelineMedia(project.clips, emptyList(), preservePositionMs = 0L)
+        viewModelScope.launch {
+            repository.saveProject(project)
+            repository.markSessionActive(project.id)
+        }
     }
 
     fun openProject(projectId: String) {
         val proj = _projects.value.firstOrNull { it.id == projectId } ?: return
+        clearHistory()
         _activeProjectId.value = proj.id
-        _selectedClipId.value = proj.clips.firstOrNull()?.id
+        _recoveryProject.value = null
+        _selection.value = proj.clips.firstOrNull()?.let { TimelineSelection(TrackType.VIDEO, it.id) }
+        _multiSelectedIds.value = emptySet()
+        _isMultiSelectMode.value = false
         _showTrimPanel.value = false
         _isFullscreenPreview.value = false
-        playerController.setTimelineClips(proj.clips, preservePositionMs = 0L)
+        playerController.setTimelineMedia(proj.clips, proj.audioClips, preservePositionMs = 0L)
+        viewModelScope.launch { repository.markSessionActive(proj.id) }
     }
 
     fun closeEditor() {
@@ -177,7 +235,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         _isFullscreenPreview.value = false
         _showTrimPanel.value = false
         _showImportSheet.value = false
+        _showTextSheet.value = false
+        _showStickerSheet.value = false
+        _isMultiSelectMode.value = false
+        _multiSelectedIds.value = emptySet()
         _activeProjectId.value = null
+        viewModelScope.launch { repository.markSessionActive(null) }
     }
 
     fun deleteProject(projectId: String) {
@@ -186,7 +249,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         if (_activeProjectId.value == projectId) {
             closeEditor()
         }
-        viewModelScope.launch { repository.saveProjects(updated) }
+        viewModelScope.launch { repository.deleteProject(projectId) }
     }
 
     fun appendUrisToActiveProject(uris: List<Uri>) {
@@ -200,8 +263,11 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 _bannerMessage.value = "Unsupported media file selected."
                 return@launch
             }
-            val updatedClips = proj.clips + probed
-            updateActiveClips(updatedClips, selectClipId = probed.first().id, rebuildPlayer = true)
+            mutateProject(
+                newProject = proj.copy(clips = proj.clips + probed),
+                newSelection = TimelineSelection(TrackType.VIDEO, probed.first().id),
+                rebuildPlayer = true
+            )
             _showImportSheet.value = false
         }
     }
@@ -216,36 +282,199 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             trimStartMs = 0L,
             trimEndMs = item.durationMs.coerceAtLeast(300L)
         )
-        updateActiveClips(proj.clips + clip, selectClipId = clip.id, rebuildPlayer = true)
+        mutateProject(
+            newProject = proj.copy(clips = proj.clips + clip),
+            newSelection = TimelineSelection(TrackType.VIDEO, clip.id),
+            rebuildPlayer = true
+        )
         _showImportSheet.value = false
     }
 
     fun onAudioPicked(uri: Uri) {
-        MediaPickerHelper.persistReadPermission(appContext, uri)
-        _showImportSheet.value = false
-        _bannerMessage.value = "Audio file permission saved (full audio track & SFX mixer comes in Phase 2+)."
-    }
-
-    fun selectClip(clipId: String) {
-        _selectedClipId.value = clipId
-    }
-
-    fun trimClip(clipId: String, newTrimStartMs: Long, newTrimEndMs: Long) {
         val proj = activeProject() ?: return
-        val updatedClips = proj.clips.map { clip ->
-            if (clip.id != clipId) clip
-            else {
-                val maxEnd = if (clip.kind == MediaKind.IMAGE) 30_000L else clip.sourceDurationMs
-                val safeEnd = newTrimEndMs.coerceIn(300L, maxEnd)
-                val safeStart = newTrimStartMs.coerceIn(0L, safeEnd - 300L)
-                clip.copy(trimStartMs = safeStart, trimEndMs = safeEnd)
+        val playheadMs = playerController.globalPositionMs.value
+        viewModelScope.launch {
+            val audio = MediaPickerHelper.probeAudioUri(appContext, uri, playheadMs)
+            if (audio == null) {
+                _bannerMessage.value = "Could not load selected audio file."
+                return@launch
             }
+            mutateProject(
+                newProject = proj.copy(audioClips = proj.audioClips + audio),
+                newSelection = TimelineSelection(TrackType.AUDIO, audio.id),
+                rebuildPlayer = true
+            )
+            _showImportSheet.value = false
         }
-        updateActiveClips(updatedClips, selectClipId = clipId, rebuildPlayer = false)
-        trimSyncJob?.cancel()
-        trimSyncJob = viewModelScope.launch {
-            delay(85L)
-            playerController.setTimelineClips(updatedClips, preservePositionMs = playerController.globalPositionMs.value)
+    }
+
+    fun addTextLayer(text: String, colorHex: Long, fontSizeSp: Float) {
+        val proj = activeProject() ?: return
+        val cleanText = text.trim().ifBlank { return }
+        val start = playerController.globalPositionMs.value
+        val dur = 3000L.coerceAtMost((proj.totalDurationMs - start).coerceAtLeast(1500L))
+        val layer = TextLayer(
+            text = cleanText,
+            startTimeMs = start,
+            durationMs = dur,
+            colorHex = colorHex,
+            fontSizeSp = fontSizeSp
+        )
+        mutateProject(
+            newProject = proj.copy(textLayers = proj.textLayers + layer),
+            newSelection = TimelineSelection(TrackType.TEXT, layer.id),
+            rebuildPlayer = false
+        )
+        _showTextSheet.value = false
+    }
+
+    fun addStickerLayer(preset: StickerPreset) {
+        val proj = activeProject() ?: return
+        val start = playerController.globalPositionMs.value
+        val dur = 3000L.coerceAtMost((proj.totalDurationMs - start).coerceAtLeast(1500L))
+        val sticker = StickerLayer(
+            preset = preset,
+            startTimeMs = start,
+            durationMs = dur,
+            tintHex = preset.defaultTintHex
+        )
+        mutateProject(
+            newProject = proj.copy(stickerLayers = proj.stickerLayers + sticker),
+            newSelection = TimelineSelection(TrackType.STICKER, sticker.id),
+            rebuildPlayer = false
+        )
+        _showStickerSheet.value = false
+    }
+
+    fun moveOverlayPosition(trackType: TrackType, itemId: String, posXFraction: Float, posYFraction: Float) {
+        val proj = activeProject() ?: return
+        val x = posXFraction.coerceIn(0.08f, 0.92f)
+        val y = posYFraction.coerceIn(0.08f, 0.92f)
+        val updated = when (trackType) {
+            TrackType.TEXT -> proj.copy(
+                textLayers = proj.textLayers.map {
+                    if (it.id == itemId) it.copy(posXFraction = x, posYFraction = y) else it
+                }
+            )
+            TrackType.STICKER -> proj.copy(
+                stickerLayers = proj.stickerLayers.map {
+                    if (it.id == itemId) it.copy(posXFraction = x, posYFraction = y) else it
+                }
+            )
+            else -> return
+        }
+        mutateProject(updated, recordHistoryThrottled = true, rebuildPlayer = false)
+    }
+
+    fun selectTimelineItem(trackType: TrackType, itemId: String) {
+        if (_isMultiSelectMode.value) {
+            val current = _multiSelectedIds.value.toMutableSet()
+            if (current.contains(itemId)) current.remove(itemId) else current.add(itemId)
+            _multiSelectedIds.value = current
+        }
+        _selection.value = TimelineSelection(trackType, itemId)
+    }
+
+    fun toggleMultiSelectMode() {
+        val next = !_isMultiSelectMode.value
+        _isMultiSelectMode.value = next
+        _multiSelectedIds.value = if (next) {
+            _selection.value?.itemId?.let { setOf(it) } ?: emptySet()
+        } else {
+            emptySet()
+        }
+    }
+
+    fun moveVideoClip(fromIndex: Int, toIndex: Int) {
+        val proj = activeProject() ?: return
+        if (fromIndex !in proj.clips.indices || toIndex !in proj.clips.indices || fromIndex == toIndex) return
+        val mutable = proj.clips.toMutableList()
+        val moved = mutable.removeAt(fromIndex)
+        mutable.add(toIndex, moved)
+        mutateProject(
+            newProject = proj.copy(clips = mutable),
+            newSelection = TimelineSelection(TrackType.VIDEO, moved.id),
+            rebuildPlayer = true
+        )
+    }
+
+    fun moveLayerStartTime(trackType: TrackType, itemId: String, newStartMs: Long) {
+        val proj = activeProject() ?: return
+        val safeStart = newStartMs.coerceAtLeast(0L)
+        val updated = when (trackType) {
+            TrackType.AUDIO -> proj.copy(
+                audioClips = proj.audioClips.map {
+                    if (it.id == itemId) it.copy(startTimeMs = safeStart) else it
+                }
+            )
+            TrackType.TEXT -> proj.copy(
+                textLayers = proj.textLayers.map {
+                    if (it.id == itemId) it.copy(startTimeMs = safeStart) else it
+                }
+            )
+            TrackType.STICKER -> proj.copy(
+                stickerLayers = proj.stickerLayers.map {
+                    if (it.id == itemId) it.copy(startTimeMs = safeStart) else it
+                }
+            )
+            TrackType.VIDEO -> return
+        }
+        mutateProject(updated, recordHistoryThrottled = true, rebuildPlayer = (trackType == TrackType.AUDIO))
+    }
+
+    fun trimItem(trackType: TrackType, itemId: String, newStartOrTrimMs: Long, newEndOrDurationMs: Long) {
+        val proj = activeProject() ?: return
+        when (trackType) {
+            TrackType.VIDEO -> {
+                val updatedClips = proj.clips.map { clip ->
+                    if (clip.id != itemId) clip
+                    else {
+                        val maxEnd = if (clip.kind == MediaKind.IMAGE) 30_000L else clip.sourceDurationMs
+                        val safeEnd = newEndOrDurationMs.coerceIn(300L, maxEnd)
+                        val safeStart = newStartOrTrimMs.coerceIn(0L, safeEnd - 300L)
+                        clip.copy(trimStartMs = safeStart, trimEndMs = safeEnd)
+                    }
+                }
+                mutateProject(proj.copy(clips = updatedClips), recordHistoryThrottled = true, rebuildPlayer = false)
+                trimSyncJob?.cancel()
+                trimSyncJob = viewModelScope.launch {
+                    delay(85L)
+                    activeProject()?.let {
+                        playerController.setTimelineMedia(it.clips, it.audioClips, playerController.globalPositionMs.value)
+                    }
+                }
+            }
+            TrackType.AUDIO -> {
+                val updatedAudio = proj.audioClips.map { a ->
+                    if (a.id != itemId) a
+                    else {
+                        val safeEnd = newEndOrDurationMs.coerceIn(300L, a.sourceDurationMs)
+                        val safeStart = newStartOrTrimMs.coerceIn(0L, safeEnd - 300L)
+                        a.copy(trimStartMs = safeStart, trimEndMs = safeEnd)
+                    }
+                }
+                mutateProject(proj.copy(audioClips = updatedAudio), recordHistoryThrottled = true, rebuildPlayer = true)
+            }
+            TrackType.TEXT -> {
+                val updatedText = proj.textLayers.map { t ->
+                    if (t.id != itemId) t
+                    else t.copy(
+                        startTimeMs = newStartOrTrimMs.coerceAtLeast(0L),
+                        durationMs = newEndOrDurationMs.coerceIn(400L, 60_000L)
+                    )
+                }
+                mutateProject(proj.copy(textLayers = updatedText), recordHistoryThrottled = true, rebuildPlayer = false)
+            }
+            TrackType.STICKER -> {
+                val updatedStickers = proj.stickerLayers.map { s ->
+                    if (s.id != itemId) s
+                    else s.copy(
+                        startTimeMs = newStartOrTrimMs.coerceAtLeast(0L),
+                        durationMs = newEndOrDurationMs.coerceIn(400L, 60_000L)
+                    )
+                }
+                mutateProject(proj.copy(stickerLayers = updatedStickers), recordHistoryThrottled = true, rebuildPlayer = false)
+            }
         }
     }
 
@@ -311,18 +540,177 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 }
             }
         }
-        updateActiveClips(updatedClips, selectClipId = rightClip.id, rebuildPlayer = true)
+        mutateProject(
+            newProject = proj.copy(clips = updatedClips),
+            newSelection = TimelineSelection(TrackType.VIDEO, rightClip.id),
+            rebuildPlayer = true
+        )
     }
 
-    fun deleteSelectedClip() {
+    fun duplicateSelected() {
         val proj = activeProject() ?: return
-        val selId = _selectedClipId.value ?: return
-        if (proj.clips.size <= 1) {
-            _bannerMessage.value = "Project needs at least one clip on the timeline."
+        val idsToDup = if (_isMultiSelectMode.value && _multiSelectedIds.value.isNotEmpty()) {
+            _multiSelectedIds.value
+        } else {
+            _selection.value?.itemId?.let { setOf(it) } ?: return
+        }
+
+        val newVideos = buildList {
+            proj.clips.forEach { clip ->
+                add(clip)
+                if (clip.id in idsToDup) {
+                    add(clip.copy(id = UUID.randomUUID().toString(), displayName = "${clip.displayName} Copy"))
+                }
+            }
+        }
+        val newAudios = buildList {
+            proj.audioClips.forEach { a ->
+                add(a)
+                if (a.id in idsToDup) {
+                    add(a.copy(id = UUID.randomUUID().toString(), startTimeMs = a.startTimeMs + a.activeDurationMs))
+                }
+            }
+        }
+        val newTexts = buildList {
+            proj.textLayers.forEach { t ->
+                add(t)
+                if (t.id in idsToDup) {
+                    add(t.copy(id = UUID.randomUUID().toString(), startTimeMs = t.startTimeMs + t.durationMs))
+                }
+            }
+        }
+        val newStickers = buildList {
+            proj.stickerLayers.forEach { s ->
+                add(s)
+                if (s.id in idsToDup) {
+                    add(s.copy(id = UUID.randomUUID().toString(), startTimeMs = s.startTimeMs + s.durationMs))
+                }
+            }
+        }
+
+        mutateProject(
+            newProject = proj.copy(
+                clips = newVideos,
+                audioClips = newAudios,
+                textLayers = newTexts,
+                stickerLayers = newStickers
+            ),
+            rebuildPlayer = true
+        )
+        _bannerMessage.value = "Duplicated ${idsToDup.size} item(s)."
+    }
+
+    fun deleteSelected(ripple: Boolean) {
+        val proj = activeProject() ?: return
+        val idsToDelete = if (_isMultiSelectMode.value && _multiSelectedIds.value.isNotEmpty()) {
+            _multiSelectedIds.value
+        } else {
+            _selection.value?.itemId?.let { setOf(it) } ?: return
+        }
+
+        val remainingVideos = proj.clips.filterNot { it.id in idsToDelete }
+        if (remainingVideos.isEmpty()) {
+            _bannerMessage.value = "Main Video track needs at least 1 clip."
             return
         }
-        val updatedClips = proj.clips.filterNot { it.id == selId }
-        updateActiveClips(updatedClips, selectClipId = updatedClips.firstOrNull()?.id, rebuildPlayer = true)
+
+        // Compute deleted video duration windows for true cross-track Ripple Delete
+        var accMs = 0L
+        val deletedVideoWindows = mutableListOf<Pair<Long, Long>>()
+        proj.clips.forEach { clip ->
+            val dur = clip.activeDurationMs
+            if (clip.id in idsToDelete) {
+                deletedVideoWindows.add(accMs to dur)
+            }
+            accMs += dur
+        }
+
+        fun shiftTimeForRipple(startMs: Long): Long {
+            if (!ripple || deletedVideoWindows.isEmpty()) return startMs
+            var shift = 0L
+            deletedVideoWindows.forEach { (winStart, winDur) ->
+                if (startMs >= winStart + winDur) shift += winDur
+            }
+            return (startMs - shift).coerceAtLeast(0L)
+        }
+
+        var nextAudios = proj.audioClips.filterNot { it.id in idsToDelete }
+            .map { it.copy(startTimeMs = shiftTimeForRipple(it.startTimeMs)) }
+        var nextTexts = proj.textLayers.filterNot { it.id in idsToDelete }
+            .map { it.copy(startTimeMs = shiftTimeForRipple(it.startTimeMs)) }
+        var nextStickers = proj.stickerLayers.filterNot { it.id in idsToDelete }
+            .map { it.copy(startTimeMs = shiftTimeForRipple(it.startTimeMs)) }
+
+        if (ripple) {
+            // Also ripple-close gaps on Audio/Text/Sticker tracks when items on those tracks were deleted
+            if (proj.audioClips.any { it.id in idsToDelete }) {
+                var cursor = 0L
+                nextAudios = nextAudios.sortedBy { it.startTimeMs }.map { a ->
+                    val out = a.copy(startTimeMs = cursor)
+                    cursor += a.activeDurationMs
+                    out
+                }
+            }
+            if (proj.textLayers.any { it.id in idsToDelete }) {
+                var cursor = 0L
+                nextTexts = nextTexts.sortedBy { it.startTimeMs }.map { t ->
+                    val out = t.copy(startTimeMs = cursor)
+                    cursor += t.durationMs
+                    out
+                }
+            }
+            if (proj.stickerLayers.any { it.id in idsToDelete }) {
+                var cursor = 0L
+                nextStickers = nextStickers.sortedBy { it.startTimeMs }.map { s ->
+                    val out = s.copy(startTimeMs = cursor)
+                    cursor += s.durationMs
+                    out
+                }
+            }
+        }
+
+        val nextSel = remainingVideos.firstOrNull()?.let { TimelineSelection(TrackType.VIDEO, it.id) }
+        _multiSelectedIds.value = emptySet()
+        _isMultiSelectMode.value = false
+        mutateProject(
+            newProject = proj.copy(
+                clips = remainingVideos,
+                audioClips = nextAudios,
+                textLayers = nextTexts,
+                stickerLayers = nextStickers
+            ),
+            newSelection = nextSel,
+            rebuildPlayer = true
+        )
+    }
+
+    fun undo() {
+        val current = activeProject() ?: return
+        if (undoStack.isEmpty()) return
+        val prev = undoStack.removeLast()
+        redoStack.addLast(current)
+        applyHistoryState(prev)
+    }
+
+    fun redo() {
+        val current = activeProject() ?: return
+        if (redoStack.isEmpty()) return
+        val next = redoStack.removeLast()
+        undoStack.addLast(current)
+        applyHistoryState(next)
+    }
+
+    private fun applyHistoryState(snapshot: EditorProject) {
+        val restored = snapshot.copy(updatedAtMs = System.currentTimeMillis(), inActiveSession = true)
+        _projects.value = _projects.value.map { if (it.id == restored.id) restored else it }
+        syncHistoryFlags()
+        playerController.setTimelineMedia(restored.clips, restored.audioClips, playerController.globalPositionMs.value)
+        viewModelScope.launch { repository.saveProject(restored) }
+    }
+
+    fun cycleActiveAspectRatio() {
+        val proj = activeProject() ?: return
+        mutateProject(proj.copy(aspectRatio = proj.aspectRatio.next()), rebuildPlayer = false)
     }
 
     fun toggleTrimPanel() {
@@ -342,6 +730,14 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         if (visible) refreshRecentMedia()
     }
 
+    fun setTextSheetVisible(visible: Boolean) {
+        _showTextSheet.value = visible
+    }
+
+    fun setStickerSheetVisible(visible: Boolean) {
+        _showStickerSheet.value = visible
+    }
+
     fun setExportSheetVisible(visible: Boolean) {
         if (visible) {
             playerController.pause()
@@ -358,9 +754,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val proj = activeProject() ?: return
         playerController.pause()
         exporter.startExport(
-            projectName = proj.name,
-            clips = proj.clips,
-            aspectRatio = proj.aspectRatio,
+            project = proj,
             resolution = _exportResolution.value
         ) { nextState ->
             _exportState.value = nextState
@@ -376,28 +770,44 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         _bannerMessage.value = null
     }
 
-    private fun updateActiveClips(
-        newClips: List<TimelineClip>,
-        selectClipId: String?,
+    private fun mutateProject(
+        newProject: EditorProject,
+        newSelection: TimelineSelection? = _selection.value,
+        recordHistoryThrottled: Boolean = false,
         rebuildPlayer: Boolean
     ) {
-        val activeId = _activeProjectId.value ?: return
-        val updatedProjects = _projects.value.map { proj ->
-            if (proj.id == activeId) {
-                proj.copy(clips = newClips, updatedAtMs = System.currentTimeMillis())
-            } else {
-                proj
-            }
+        val current = activeProject() ?: return
+        val now = System.currentTimeMillis()
+        if (!recordHistoryThrottled || now - lastContinuousHistoryMs > 700L) {
+            if (undoStack.size >= 40) undoStack.removeFirst()
+            undoStack.addLast(current)
+            redoStack.clear()
+            lastContinuousHistoryMs = now
         }
-        _projects.value = updatedProjects
-        _selectedClipId.value = selectClipId
+        syncHistoryFlags()
+
+        val saved = newProject.copy(updatedAtMs = now, inActiveSession = true)
+        _projects.value = _projects.value.map { if (it.id == saved.id) saved else it }
+        _selection.value = newSelection
         if (rebuildPlayer) {
-            playerController.setTimelineClips(
-                newClips,
+            playerController.setTimelineMedia(
+                saved.clips,
+                saved.audioClips,
                 preservePositionMs = playerController.globalPositionMs.value
             )
         }
-        viewModelScope.launch { repository.saveProjects(updatedProjects) }
+        viewModelScope.launch { repository.saveProject(saved) }
+    }
+
+    private fun clearHistory() {
+        undoStack.clear()
+        redoStack.clear()
+        syncHistoryFlags()
+    }
+
+    private fun syncHistoryFlags() {
+        _canUndo.value = undoStack.isNotEmpty()
+        _canRedo.value = redoStack.isNotEmpty()
     }
 
     override fun onCleared() {

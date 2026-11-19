@@ -7,6 +7,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -26,6 +27,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -34,16 +36,24 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.Redo
+import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AspectRatio
+import androidx.compose.material.icons.rounded.CheckBox
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.ContentCut
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.EmojiEmotions
 import androidx.compose.material.icons.rounded.Fullscreen
 import androidx.compose.material.icons.rounded.FullscreenExit
+import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -64,11 +74,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -76,14 +89,16 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.tg7.editor.engine.player.StudioPlayerController
 import com.tg7.editor.media.MediaPickerHelper
-import com.tg7.editor.model.CanvasAspectRatio
 import com.tg7.editor.model.EditorProject
 import com.tg7.editor.model.ExportResolution
 import com.tg7.editor.model.MediaKind
 import com.tg7.editor.model.TimelineClip
+import com.tg7.editor.model.TimelineSelection
+import com.tg7.editor.model.TrackType
+import com.tg7.editor.ui.components.MultiTrackTimeline
 import com.tg7.editor.ui.components.TG7DockToolButton
-import com.tg7.editor.ui.components.TimelineCanvasStrip
 import com.tg7.editor.ui.theme.TG7Colors
+import kotlin.math.roundToInt
 
 @Composable
 fun EditorScreen(
@@ -91,30 +106,46 @@ fun EditorScreen(
     playerController: StudioPlayerController,
     isPlaying: Boolean,
     globalPositionMs: Long,
-    selectedClipId: String?,
+    selection: TimelineSelection?,
+    multiSelectedIds: Set<String>,
+    isMultiSelectMode: Boolean,
+    timelineZoom: Float,
+    canUndo: Boolean,
+    canRedo: Boolean,
     exportResolution: ExportResolution,
     showTrimPanel: Boolean,
     isFullscreenPreview: Boolean,
     playerError: String?,
     bannerMessage: String?,
     onBack: () -> Unit,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit,
     onExportClick: () -> Unit,
     onTogglePlay: () -> Unit,
     onSeek: (Long) -> Unit,
-    onSelectClip: (String) -> Unit,
-    onTrimClip: (clipId: String, trimStartMs: Long, trimEndMs: Long) -> Unit,
+    onSelectItem: (TrackType, String) -> Unit,
+    onMoveVideoClip: (Int, Int) -> Unit,
+    onMoveLayerStart: (TrackType, String, Long) -> Unit,
+    onTrimItem: (TrackType, String, Long, Long) -> Unit,
+    onMoveOverlayPosition: (TrackType, String, Float, Float) -> Unit,
+    onZoomChange: (Float) -> Unit,
     onSplitAtPlayhead: () -> Unit,
-    onDeleteSelected: () -> Unit,
+    onDuplicateSelected: () -> Unit,
+    onToggleMultiSelect: () -> Unit,
+    onDeleteSelected: (ripple: Boolean) -> Unit,
     onToggleTrimPanel: () -> Unit,
     onCycleAspectRatio: () -> Unit,
     onAddMediaClick: () -> Unit,
+    onAddAudioClick: () -> Unit,
+    onAddTextClick: () -> Unit,
+    onAddStickerClick: () -> Unit,
     onToggleFullscreen: () -> Unit,
     onDismissError: () -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     var showFullscreenHud by remember(isFullscreenPreview) { mutableStateOf(true) }
-    val selectedClip = project.clips.firstOrNull { it.id == selectedClipId } ?: project.clips.firstOrNull()
+    val selectedVideoClip = project.clips.firstOrNull { it.id == selection?.itemId } ?: project.clips.firstOrNull()
 
     if (isFullscreenPreview) {
         Box(
@@ -124,8 +155,12 @@ fun EditorScreen(
                 .clickable { showFullscreenHud = !showFullscreenHud }
         ) {
             AspectPreviewStage(
-                aspectRatio = project.aspectRatio,
+                project = project,
+                globalPositionMs = globalPositionMs,
+                selection = selection,
                 playerController = playerController,
+                onSelectItem = onSelectItem,
+                onMoveOverlayPosition = onMoveOverlayPosition,
                 modifier = Modifier.fillMaxSize()
             )
             if (showFullscreenHud) {
@@ -215,13 +250,13 @@ fun EditorScreen(
             .displayCutoutPadding()
             .navigationBarsPadding()
     ) {
-        // Safe-Area Top Bar (all buttons >= 48dp touch height with icon + text)
+        // Safe-Area Top Bar: Home, Undo, Redo, Export (all >= 48dp touch targets)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 56.dp)
                 .background(Color(0xFF06080D))
-                .padding(horizontal = 8.dp, vertical = 4.dp),
+                .padding(horizontal = 6.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -235,33 +270,34 @@ fun EditorScreen(
                     }
                     .padding(horizontal = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                    contentDescription = "Projects",
+                    contentDescription = "Home",
                     tint = Color.White,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(18.dp)
                 )
-                Text(
-                    text = "Home",
-                    color = Color.White,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Text("Home", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
 
-            Text(
-                text = project.name,
-                color = TG7Colors.TextMuted,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 8.dp)
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                TopHistoryButton(
+                    icon = Icons.AutoMirrored.Rounded.Undo,
+                    label = "Undo",
+                    enabled = canUndo,
+                    onClick = onUndo
+                )
+                TopHistoryButton(
+                    icon = Icons.AutoMirrored.Rounded.Redo,
+                    label = "Redo",
+                    enabled = canRedo,
+                    onClick = onRedo
+                )
+            }
 
             Button(
                 onClick = {
@@ -269,16 +305,16 @@ fun EditorScreen(
                     onExportClick()
                 },
                 modifier = Modifier.heightIn(min = 48.dp),
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = TG7Colors.NeonCyan,
                     contentColor = Color.Black
                 )
             ) {
-                Icon(Icons.Rounded.Download, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.size(6.dp))
-                Text("Export ${exportResolution.label}", fontWeight = FontWeight.Black, fontSize = 12.sp)
+                Icon(Icons.Rounded.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.size(4.dp))
+                Text("Export ${exportResolution.label}", fontWeight = FontWeight.Black, fontSize = 11.sp)
             }
         }
 
@@ -288,7 +324,7 @@ fun EditorScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Color(0x2EFF1030))
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -323,27 +359,31 @@ fun EditorScreen(
             ) {
                 Box(
                     modifier = Modifier
-                        .weight(1.1f)
+                        .weight(1f)
                         .fillMaxHeight()
                         .background(Color.Black)
                         .padding(6.dp)
                 ) {
                     AspectPreviewStage(
-                        aspectRatio = project.aspectRatio,
+                        project = project,
+                        globalPositionMs = globalPositionMs,
+                        selection = selection,
                         playerController = playerController,
+                        onSelectItem = onSelectItem,
+                        onMoveOverlayPosition = onMoveOverlayPosition,
                         modifier = Modifier.fillMaxSize()
                     )
                     FloatingAddMediaButton(
                         onClick = onAddMediaClick,
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
-                            .padding(8.dp)
+                            .padding(6.dp)
                     )
                 }
 
                 Column(
                     modifier = Modifier
-                        .weight(1f)
+                        .weight(1.1f)
                         .fillMaxHeight()
                         .padding(horizontal = 8.dp),
                     verticalArrangement = Arrangement.SpaceBetween
@@ -356,42 +396,60 @@ fun EditorScreen(
                         onTogglePlay = onTogglePlay,
                         onToggleFullscreen = onToggleFullscreen
                     )
-                    if (showTrimPanel && selectedClip != null) {
-                        TrimFineControls(clip = selectedClip, onTrimClip = onTrimClip)
+                    if (showTrimPanel && selectedVideoClip != null) {
+                        TrimFineControls(
+                            clip = selectedVideoClip,
+                            onTrimClip = { id, s, e -> onTrimItem(TrackType.VIDEO, id, s, e) }
+                        )
                     }
-                    TimelineCanvasStrip(
-                        clips = project.clips,
-                        selectedClipId = selectedClipId,
+                    MultiTrackTimeline(
+                        project = project,
+                        selection = selection,
+                        multiSelectedIds = multiSelectedIds,
+                        isMultiSelectMode = isMultiSelectMode,
                         globalPositionMs = globalPositionMs,
-                        totalDurationMs = project.totalDurationMs,
+                        zoomScale = timelineZoom,
+                        onZoomChange = onZoomChange,
                         onSeek = onSeek,
-                        onSelectClip = onSelectClip,
-                        onTrimClip = onTrimClip
+                        onSelectItem = onSelectItem,
+                        onMoveVideoClip = onMoveVideoClip,
+                        onMoveLayerStart = onMoveLayerStart,
+                        onTrimItem = onTrimItem
                     )
-                    ScrollableBottomToolDock(
+                    ScrollablePhase2ToolDock(
                         aspectLabel = project.aspectRatio.label,
                         trimActive = showTrimPanel,
+                        multiSelectActive = isMultiSelectMode,
                         onAddMedia = onAddMediaClick,
+                        onAddAudio = onAddAudioClick,
+                        onAddText = onAddTextClick,
+                        onAddSticker = onAddStickerClick,
                         onTrimToggle = onToggleTrimPanel,
                         onSplit = onSplitAtPlayhead,
+                        onDuplicate = onDuplicateSelected,
+                        onToggleMultiSelect = onToggleMultiSelect,
+                        onRippleDelete = { onDeleteSelected(true) },
+                        onDelete = { onDeleteSelected(false) },
                         onCycleRatio = onCycleAspectRatio,
-                        onFullscreen = onToggleFullscreen,
-                        onDelete = onDeleteSelected
+                        onFullscreen = onToggleFullscreen
                     )
                 }
             }
         } else {
-            // Portrait: Large Preview Stage + Floating "+" button
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
                     .background(Color.Black)
-                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                    .padding(horizontal = 10.dp, vertical = 4.dp)
             ) {
                 AspectPreviewStage(
-                    aspectRatio = project.aspectRatio,
+                    project = project,
+                    globalPositionMs = globalPositionMs,
+                    selection = selection,
                     playerController = playerController,
+                    onSelectItem = onSelectItem,
+                    onMoveOverlayPosition = onMoveOverlayPosition,
                     modifier = Modifier.fillMaxSize()
                 )
                 FloatingAddMediaButton(
@@ -411,69 +469,222 @@ fun EditorScreen(
                 onToggleFullscreen = onToggleFullscreen
             )
 
-            if (showTrimPanel && selectedClip != null) {
-                TrimFineControls(clip = selectedClip, onTrimClip = onTrimClip)
-            }
-
-            Box(modifier = Modifier.padding(horizontal = 8.dp)) {
-                TimelineCanvasStrip(
-                    clips = project.clips,
-                    selectedClipId = selectedClipId,
-                    globalPositionMs = globalPositionMs,
-                    totalDurationMs = project.totalDurationMs,
-                    onSeek = onSeek,
-                    onSelectClip = onSelectClip,
-                    onTrimClip = onTrimClip
+            if (showTrimPanel && selectedVideoClip != null) {
+                TrimFineControls(
+                    clip = selectedVideoClip,
+                    onTrimClip = { id, s, e -> onTrimItem(TrackType.VIDEO, id, s, e) }
                 )
             }
 
-            Spacer(Modifier.height(6.dp))
+            Box(modifier = Modifier.padding(horizontal = 8.dp)) {
+                MultiTrackTimeline(
+                    project = project,
+                    selection = selection,
+                    multiSelectedIds = multiSelectedIds,
+                    isMultiSelectMode = isMultiSelectMode,
+                    globalPositionMs = globalPositionMs,
+                    zoomScale = timelineZoom,
+                    onZoomChange = onZoomChange,
+                    onSeek = onSeek,
+                    onSelectItem = onSelectItem,
+                    onMoveVideoClip = onMoveVideoClip,
+                    onMoveLayerStart = onMoveLayerStart,
+                    onTrimItem = onTrimItem
+                )
+            }
 
-            ScrollableBottomToolDock(
+            Spacer(Modifier.height(4.dp))
+
+            ScrollablePhase2ToolDock(
                 aspectLabel = project.aspectRatio.label,
                 trimActive = showTrimPanel,
+                multiSelectActive = isMultiSelectMode,
                 onAddMedia = onAddMediaClick,
+                onAddAudio = onAddAudioClick,
+                onAddText = onAddTextClick,
+                onAddSticker = onAddStickerClick,
                 onTrimToggle = onToggleTrimPanel,
                 onSplit = onSplitAtPlayhead,
+                onDuplicate = onDuplicateSelected,
+                onToggleMultiSelect = onToggleMultiSelect,
+                onRippleDelete = { onDeleteSelected(true) },
+                onDelete = { onDeleteSelected(false) },
                 onCycleRatio = onCycleAspectRatio,
-                onFullscreen = onToggleFullscreen,
-                onDelete = onDeleteSelected
+                onFullscreen = onToggleFullscreen
             )
         }
     }
 }
 
 @Composable
+private fun TopHistoryButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    val haptic = LocalHapticFeedback.current
+    Row(
+        modifier = Modifier
+            .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(enabled = enabled) {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onClick()
+            }
+            .padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = if (enabled) TG7Colors.NeonCyan else Color(0xFF3E4554),
+            modifier = Modifier.size(18.dp)
+        )
+        Text(
+            text = label,
+            color = if (enabled) Color.White else Color(0xFF4B5364),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+    }
+}
+
+@Composable
 private fun AspectPreviewStage(
-    aspectRatio: CanvasAspectRatio,
+    project: EditorProject,
+    globalPositionMs: Long,
+    selection: TimelineSelection?,
     playerController: StudioPlayerController,
+    onSelectItem: (TrackType, String) -> Unit,
+    onMoveOverlayPosition: (TrackType, String, Float, Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val density = LocalDensity.current
     BoxWithConstraints(
         modifier = modifier,
         contentAlignment = Alignment.Center
     ) {
         val boxRatio = if (maxHeight > 0.dp) maxWidth / maxHeight else 1f
-        val sizeModifier = if (boxRatio > aspectRatio.ratio) {
+        val stageModifier = if (boxRatio > project.aspectRatio.ratio) {
             Modifier
                 .fillMaxHeight()
-                .aspectRatio(aspectRatio.ratio)
+                .aspectRatio(project.aspectRatio.ratio)
         } else {
             Modifier
                 .fillMaxWidth()
-                .aspectRatio(aspectRatio.ratio)
+                .aspectRatio(project.aspectRatio.ratio)
         }
 
-        Box(
-            modifier = sizeModifier
+        BoxWithConstraints(
+            modifier = stageModifier
                 .clip(RoundedCornerShape(12.dp))
                 .background(Color(0xFF040508))
                 .border(1.dp, Color(0xFF1A202E), RoundedCornerShape(12.dp))
         ) {
+            val stageWidthPx = with(density) { maxWidth.toPx() }.coerceAtLeast(1f)
+            val stageHeightPx = with(density) { maxHeight.toPx() }.coerceAtLeast(1f)
+
             NativeVideoSurface(
                 playerController = playerController,
                 modifier = Modifier.fillMaxSize()
             )
+
+            // Live Text Overlays (draggable on preview stage)
+            project.textLayers.filter {
+                globalPositionMs in it.startTimeMs..(it.startTimeMs + it.durationMs)
+            }.forEach { layer ->
+                val isSelected = selection?.itemId == layer.id
+                Box(
+                    modifier = Modifier
+                        .offset {
+                            IntOffset(
+                                x = ((layer.posXFraction - 0.5f) * stageWidthPx).roundToInt(),
+                                y = ((layer.posYFraction - 0.5f) * stageHeightPx).roundToInt()
+                            )
+                        }
+                        .align(Alignment.Center)
+                        .border(
+                            width = if (isSelected) 1.5.dp else 0.dp,
+                            color = if (isSelected) TG7Colors.NeonCyan else Color.Transparent,
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        .pointerInput(layer.id, stageWidthPx, stageHeightPx) {
+                            var curX = layer.posXFraction
+                            var curY = layer.posYFraction
+                            detectDragGestures(
+                                onDragStart = {
+                                    curX = layer.posXFraction
+                                    curY = layer.posYFraction
+                                    onSelectItem(TrackType.TEXT, layer.id)
+                                },
+                                onDrag = { _, dragAmount ->
+                                    curX = (curX + dragAmount.x / stageWidthPx).coerceIn(0.08f, 0.92f)
+                                    curY = (curY + dragAmount.y / stageHeightPx).coerceIn(0.08f, 0.92f)
+                                    onMoveOverlayPosition(TrackType.TEXT, layer.id, curX, curY)
+                                }
+                            )
+                        }
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = layer.text,
+                        color = Color(layer.colorHex),
+                        fontSize = layer.fontSizeSp.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                }
+            }
+
+            // Live Sticker Overlays (draggable on preview stage)
+            project.stickerLayers.filter {
+                globalPositionMs in it.startTimeMs..(it.startTimeMs + it.durationMs)
+            }.forEach { sticker ->
+                val isSelected = selection?.itemId == sticker.id
+                Box(
+                    modifier = Modifier
+                        .offset {
+                            IntOffset(
+                                x = ((sticker.posXFraction - 0.5f) * stageWidthPx).roundToInt(),
+                                y = ((sticker.posYFraction - 0.5f) * stageHeightPx).roundToInt()
+                            )
+                        }
+                        .align(Alignment.Center)
+                        .size(sticker.sizeDp.dp)
+                        .clip(CircleShape)
+                        .background(Color(0x990A0E17))
+                        .border(
+                            width = if (isSelected) 2.dp else 1.5.dp,
+                            color = if (isSelected) TG7Colors.NeonCyan else Color(sticker.tintHex),
+                            shape = CircleShape
+                        )
+                        .pointerInput(sticker.id, stageWidthPx, stageHeightPx) {
+                            var curX = sticker.posXFraction
+                            var curY = sticker.posYFraction
+                            detectDragGestures(
+                                onDragStart = {
+                                    curX = sticker.posXFraction
+                                    curY = sticker.posYFraction
+                                    onSelectItem(TrackType.STICKER, sticker.id)
+                                },
+                                onDrag = { _, dragAmount ->
+                                    curX = (curX + dragAmount.x / stageWidthPx).coerceIn(0.08f, 0.92f)
+                                    curY = (curY + dragAmount.y / stageHeightPx).coerceIn(0.08f, 0.92f)
+                                    onMoveOverlayPosition(TrackType.STICKER, sticker.id, curX, curY)
+                                }
+                            )
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = sticker.preset.icon,
+                        contentDescription = sticker.preset.label,
+                        tint = Color(sticker.tintHex),
+                        modifier = Modifier.size((sticker.sizeDp * 0.58f).dp)
+                    )
+                }
+            }
         }
     }
 }
@@ -560,7 +771,7 @@ private fun TransportControlsRow(
         modifier = Modifier
             .fillMaxWidth()
             .background(Color(0xFF06080D))
-            .padding(horizontal = 12.dp, vertical = 4.dp),
+            .padding(horizontal = 12.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
@@ -681,15 +892,22 @@ private fun TrimFineControls(
 }
 
 @Composable
-private fun ScrollableBottomToolDock(
+private fun ScrollablePhase2ToolDock(
     aspectLabel: String,
     trimActive: Boolean,
+    multiSelectActive: Boolean,
     onAddMedia: () -> Unit,
+    onAddAudio: () -> Unit,
+    onAddText: () -> Unit,
+    onAddSticker: () -> Unit,
     onTrimToggle: () -> Unit,
     onSplit: () -> Unit,
+    onDuplicate: () -> Unit,
+    onToggleMultiSelect: () -> Unit,
+    onRippleDelete: () -> Unit,
+    onDelete: () -> Unit,
     onCycleRatio: () -> Unit,
-    onFullscreen: () -> Unit,
-    onDelete: () -> Unit
+    onFullscreen: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -701,47 +919,17 @@ private fun ScrollableBottomToolDock(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        TG7DockToolButton(
-            icon = Icons.Rounded.Add,
-            label = "Add Clips",
-            tint = TG7Colors.NeonCyan,
-            active = false,
-            onClick = onAddMedia
-        )
-        TG7DockToolButton(
-            icon = Icons.Rounded.Tune,
-            label = "Trim",
-            tint = if (trimActive) TG7Colors.NeonCyan else Color.White,
-            active = trimActive,
-            onClick = onTrimToggle
-        )
-        TG7DockToolButton(
-            icon = Icons.Rounded.ContentCut,
-            label = "Split",
-            tint = Color.White,
-            active = false,
-            onClick = onSplit
-        )
-        TG7DockToolButton(
-            icon = Icons.Rounded.AspectRatio,
-            label = "Ratio $aspectLabel",
-            tint = TG7Colors.NeonCyan,
-            active = false,
-            onClick = onCycleRatio
-        )
-        TG7DockToolButton(
-            icon = Icons.Rounded.Fullscreen,
-            label = "Fullscreen",
-            tint = Color.White,
-            active = false,
-            onClick = onFullscreen
-        )
-        TG7DockToolButton(
-            icon = Icons.Rounded.Delete,
-            label = "Delete",
-            tint = TG7Colors.BloodRed,
-            active = false,
-            onClick = onDelete
-        )
+        TG7DockToolButton(icon = Icons.Rounded.Add, label = "Add Clip", tint = TG7Colors.NeonCyan, active = false, onClick = onAddMedia)
+        TG7DockToolButton(icon = Icons.Rounded.MusicNote, label = "Audio", tint = Color(0xFF22C55E), active = false, onClick = onAddAudio)
+        TG7DockToolButton(icon = Icons.Rounded.TextFields, label = "Text", tint = Color(0xFFC084FC), active = false, onClick = onAddText)
+        TG7DockToolButton(icon = Icons.Rounded.EmojiEmotions, label = "Sticker", tint = TG7Colors.BloodRed, active = false, onClick = onAddSticker)
+        TG7DockToolButton(icon = Icons.Rounded.Tune, label = "Trim", tint = if (trimActive) TG7Colors.NeonCyan else Color.White, active = trimActive, onClick = onTrimToggle)
+        TG7DockToolButton(icon = Icons.Rounded.ContentCut, label = "Split", tint = Color.White, active = false, onClick = onSplit)
+        TG7DockToolButton(icon = Icons.Rounded.ContentCopy, label = "Duplicate", tint = Color.White, active = false, onClick = onDuplicate)
+        TG7DockToolButton(icon = Icons.Rounded.CheckBox, label = "Multi", tint = if (multiSelectActive) TG7Colors.NeonCyan else Color.White, active = multiSelectActive, onClick = onToggleMultiSelect)
+        TG7DockToolButton(icon = Icons.Rounded.DeleteSweep, label = "Ripple Del", tint = TG7Colors.BloodRed, active = false, onClick = onRippleDelete)
+        TG7DockToolButton(icon = Icons.Rounded.Delete, label = "Delete", tint = TG7Colors.BloodRed, active = false, onClick = onDelete)
+        TG7DockToolButton(icon = Icons.Rounded.AspectRatio, label = "Ratio $aspectLabel", tint = TG7Colors.NeonCyan, active = false, onClick = onCycleRatio)
+        TG7DockToolButton(icon = Icons.Rounded.Fullscreen, label = "Fullscreen", tint = Color.White, active = false, onClick = onFullscreen)
     }
 }

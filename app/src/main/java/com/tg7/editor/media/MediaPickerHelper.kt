@@ -5,6 +5,7 @@ import android.content.Intent
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.provider.OpenableColumns
+import com.tg7.editor.model.AudioClip
 import com.tg7.editor.model.MediaKind
 import com.tg7.editor.model.TimelineClip
 import kotlinx.coroutines.Dispatchers
@@ -72,6 +73,37 @@ object MediaPickerHelper {
                 sourceDurationMs = durationMs,
                 trimStartMs = 0L,
                 trimEndMs = durationMs
+            )
+        }
+
+    suspend fun probeAudioUri(context: Context, uri: Uri, startTimeMs: Long): AudioClip? =
+        withContext(Dispatchers.IO) {
+            persistReadPermission(context, uri)
+            val displayName = resolveDisplayName(context, uri)
+            var durationMs = 15_000L
+            val retriever = MediaMetadataRetriever()
+            try {
+                retriever.setDataSource(context, uri)
+                val raw = retriever
+                    .extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                    ?.toLongOrNull()
+                if (raw != null && raw >= 300L) {
+                    durationMs = raw
+                }
+            } catch (_: Throwable) {
+                return@withContext null
+            } finally {
+                runCatching { retriever.release() }
+            }
+
+            AudioClip(
+                uriString = uri.toString(),
+                displayName = displayName,
+                startTimeMs = startTimeMs.coerceAtLeast(0L),
+                sourceDurationMs = durationMs,
+                trimStartMs = 0L,
+                trimEndMs = durationMs,
+                volume = 1.0f
             )
         }
 

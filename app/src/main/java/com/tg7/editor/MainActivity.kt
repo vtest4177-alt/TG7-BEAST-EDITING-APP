@@ -26,6 +26,8 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.tg7.editor.crash.CrashErrorScreen
 import com.tg7.editor.crash.CrashHandler
+import com.tg7.editor.ui.components.AddStickerSheet
+import com.tg7.editor.ui.components.AddTextSheet
 import com.tg7.editor.ui.components.ExportSheet
 import com.tg7.editor.ui.components.RecentMediaSheet
 import com.tg7.editor.ui.editor.EditorScreen
@@ -73,8 +75,14 @@ class MainActivity : ComponentActivity() {
                 }
 
                 val projects by viewModel.projects.collectAsState()
+                val recoveryProject by viewModel.recoveryProject.collectAsState()
                 val activeProjectId by viewModel.activeProjectId.collectAsState()
-                val selectedClipId by viewModel.selectedClipId.collectAsState()
+                val selection by viewModel.selection.collectAsState()
+                val multiSelectedIds by viewModel.multiSelectedIds.collectAsState()
+                val isMultiSelectMode by viewModel.isMultiSelectMode.collectAsState()
+                val timelineZoom by viewModel.timelineZoom.collectAsState()
+                val canUndo by viewModel.canUndo.collectAsState()
+                val canRedo by viewModel.canRedo.collectAsState()
                 val preferredAspectRatio by viewModel.preferredAspectRatio.collectAsState()
                 val recentMedia by viewModel.recentMedia.collectAsState()
                 val hasRecentPermission by viewModel.hasRecentPermission.collectAsState()
@@ -82,6 +90,8 @@ class MainActivity : ComponentActivity() {
                 val exportState by viewModel.exportState.collectAsState()
                 val showExportSheet by viewModel.showExportSheet.collectAsState()
                 val showImportSheet by viewModel.showImportSheet.collectAsState()
+                val showTextSheet by viewModel.showTextSheet.collectAsState()
+                val showStickerSheet by viewModel.showStickerSheet.collectAsState()
                 val showTrimPanel by viewModel.showTrimPanel.collectAsState()
                 val isFullscreenPreview by viewModel.isFullscreenPreview.collectAsState()
                 val isImporting by viewModel.isImporting.collectAsState()
@@ -160,10 +170,13 @@ class MainActivity : ComponentActivity() {
                 if (activeProject == null) {
                     HomeScreen(
                         projects = projects,
+                        recoveryProject = recoveryProject,
                         selectedAspectRatio = preferredAspectRatio,
                         recentMedia = recentMedia,
                         hasRecentPermission = hasRecentPermission,
                         isImporting = isImporting,
+                        onRecoverSession = viewModel::recoverLastSession,
+                        onDismissRecovery = viewModel::dismissRecovery,
                         onSelectAspectRatio = viewModel::setPreferredAspectRatio,
                         onNewProjectClick = {
                             newProjectPicker.launch(
@@ -181,23 +194,39 @@ class MainActivity : ComponentActivity() {
                         playerController = viewModel.playerController,
                         isPlaying = isPlaying,
                         globalPositionMs = globalPositionMs,
-                        selectedClipId = selectedClipId,
+                        selection = selection,
+                        multiSelectedIds = multiSelectedIds,
+                        isMultiSelectMode = isMultiSelectMode,
+                        timelineZoom = timelineZoom,
+                        canUndo = canUndo,
+                        canRedo = canRedo,
                         exportResolution = exportResolution,
                         showTrimPanel = showTrimPanel,
                         isFullscreenPreview = isFullscreenPreview,
                         playerError = playerError,
                         bannerMessage = bannerMessage,
                         onBack = viewModel::closeEditor,
+                        onUndo = viewModel::undo,
+                        onRedo = viewModel::redo,
                         onExportClick = { viewModel.setExportSheetVisible(true) },
                         onTogglePlay = viewModel.playerController::togglePlayPause,
                         onSeek = viewModel.playerController::seekToGlobal,
-                        onSelectClip = viewModel::selectClip,
-                        onTrimClip = viewModel::trimClip,
+                        onSelectItem = viewModel::selectTimelineItem,
+                        onMoveVideoClip = viewModel::moveVideoClip,
+                        onMoveLayerStart = viewModel::moveLayerStartTime,
+                        onTrimItem = viewModel::trimItem,
+                        onMoveOverlayPosition = viewModel::moveOverlayPosition,
+                        onZoomChange = { next -> viewModel.adjustTimelineZoom(next, absolute = true) },
                         onSplitAtPlayhead = viewModel::splitAtPlayhead,
-                        onDeleteSelected = viewModel::deleteSelectedClip,
+                        onDuplicateSelected = viewModel::duplicateSelected,
+                        onToggleMultiSelect = viewModel::toggleMultiSelectMode,
+                        onDeleteSelected = viewModel::deleteSelected,
                         onToggleTrimPanel = viewModel::toggleTrimPanel,
                         onCycleAspectRatio = viewModel::cycleActiveAspectRatio,
                         onAddMediaClick = { viewModel.setImportSheetVisible(true) },
+                        onAddAudioClick = { audioPicker.launch(arrayOf("audio/*")) },
+                        onAddTextClick = { viewModel.setTextSheetVisible(true) },
+                        onAddStickerClick = { viewModel.setStickerSheetVisible(true) },
                         onToggleFullscreen = viewModel::toggleFullscreenPreview,
                         onDismissError = {
                             viewModel.playerController.clearError()
@@ -220,6 +249,20 @@ class MainActivity : ComponentActivity() {
                             },
                             onSelectRecentItem = viewModel::appendRecentItemToActiveProject,
                             onDismiss = { viewModel.setImportSheetVisible(false) }
+                        )
+                    }
+
+                    if (showTextSheet) {
+                        AddTextSheet(
+                            onConfirmText = viewModel::addTextLayer,
+                            onDismiss = { viewModel.setTextSheetVisible(false) }
+                        )
+                    }
+
+                    if (showStickerSheet) {
+                        AddStickerSheet(
+                            onSelectSticker = viewModel::addStickerLayer,
+                            onDismiss = { viewModel.setStickerSheetVisible(false) }
                         )
                     }
 

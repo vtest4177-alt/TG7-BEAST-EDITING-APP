@@ -32,6 +32,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AddCircle
 import androidx.compose.material.icons.rounded.AspectRatio
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Crop169
 import androidx.compose.material.icons.rounded.CropPortrait
 import androidx.compose.material.icons.rounded.CropSquare
@@ -39,10 +40,12 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.LockOpen
 import androidx.compose.material.icons.rounded.Movie
 import androidx.compose.material.icons.rounded.PhotoLibrary
+import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -72,10 +75,13 @@ import com.tg7.editor.ui.theme.TG7Colors
 @Composable
 fun HomeScreen(
     projects: List<EditorProject>,
+    recoveryProject: EditorProject?,
     selectedAspectRatio: CanvasAspectRatio,
     recentMedia: List<RecentMediaItem>,
     hasRecentPermission: Boolean,
     isImporting: Boolean,
+    onRecoverSession: () -> Unit,
+    onDismissRecovery: () -> Unit,
     onSelectAspectRatio: (CanvasAspectRatio) -> Unit,
     onNewProjectClick: () -> Unit,
     onOpenProject: (String) -> Unit,
@@ -119,7 +125,7 @@ fun HomeScreen(
                     .padding(horizontal = 10.dp, vertical = 6.dp)
             ) {
                 Text(
-                    text = "OLED · MEDIA3",
+                    text = "ROOM · MULTI-TRACK",
                     color = TG7Colors.NeonCyan,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
@@ -131,9 +137,79 @@ fun HomeScreen(
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Premium Glass Studio Launch Card with Canvas Ratio Picker (9:16, 16:9, 1:1)
+            // Crash Recovery Banner (Room Auto-Save)
+            if (recoveryProject != null) {
+                item {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color(0xFF0A1D24))
+                            .border(1.5.dp, TG7Colors.NeonCyan, RoundedCornerShape(16.dp))
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(Icons.Rounded.Restore, contentDescription = null, tint = TG7Colors.NeonCyan)
+                            Column {
+                                Text(
+                                    text = "Recover Active Session",
+                                    color = Color.White,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "${recoveryProject.name} · ${recoveryProject.clips.size} clips auto-saved",
+                                    color = TG7Colors.NeonCyan,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    onRecoverSession()
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 48.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = TG7Colors.NeonCyan,
+                                    contentColor = Color.Black
+                                )
+                            ) {
+                                Icon(Icons.Rounded.Restore, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.size(6.dp))
+                                Text("Resume Edit", fontWeight = FontWeight.Bold)
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onDismissRecovery()
+                                },
+                                modifier = Modifier.heightIn(min = 48.dp),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(Icons.Rounded.Close, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.size(4.dp))
+                                Text("Dismiss", color = Color.White)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Glass Launch Card + Canvas Ratio Selector (9:16, 16:9, 1:1)
             item {
                 Column(
                     modifier = Modifier
@@ -250,7 +326,7 @@ fun HomeScreen(
                                     fontWeight = FontWeight.Black
                                 )
                                 Text(
-                                    text = "Import photos & videos · ${selectedAspectRatio.label} Studio",
+                                    text = "Multi-track studio · ${selectedAspectRatio.label} Canvas",
                                     color = Color.Black.copy(alpha = 0.8f),
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold
@@ -417,7 +493,7 @@ fun HomeScreen(
                 }
             }
 
-            // Saved Projects Header
+            // Room Projects Section Header
             item {
                 Text(
                     text = "PROJECTS (${projects.size})",
@@ -461,6 +537,12 @@ fun HomeScreen(
                 }
             } else {
                 items(projects, key = { it.id }) { proj ->
+                    val layerSummary = buildString {
+                        append("${proj.aspectRatio.label} · ${proj.clips.size} video")
+                        if (proj.audioClips.isNotEmpty()) append(" · ${proj.audioClips.size} audio")
+                        if (proj.textLayers.isNotEmpty()) append(" · ${proj.textLayers.size} text")
+                        if (proj.stickerLayers.isNotEmpty()) append(" · ${proj.stickerLayers.size} sticker")
+                    }
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -504,9 +586,11 @@ fun HomeScreen(
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = "${proj.aspectRatio.label} · ${proj.clips.size} clip${if (proj.clips.size == 1) "" else "s"} · ${MediaPickerHelper.formatDuration(proj.totalDurationMs)}",
+                                text = "$layerSummary · ${MediaPickerHelper.formatDuration(proj.totalDurationMs)}",
                                 color = TG7Colors.NeonCyan,
-                                fontSize = 12.sp
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
 

@@ -6,6 +6,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import com.tg7.editor.model.AudioClip
 import com.tg7.editor.model.MediaKind
 import com.tg7.editor.model.TimelineClip
 import kotlinx.coroutines.CoroutineScope
@@ -17,15 +18,20 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 class StudioPlayerController(
     context: Context,
     private val scope: CoroutineScope
 ) {
-    val player: ExoPlayer = ExoPlayer.Builder(context.applicationContext).build()
+    private val appContext = context.applicationContext
+    val player: ExoPlayer = ExoPlayer.Builder(appContext).build()
+    private val audioPlayer: ExoPlayer = ExoPlayer.Builder(appContext).build()
 
     private var currentClips: List<TimelineClip> = emptyList()
+    private var currentAudioClips: List<AudioClip> = emptyList()
     private var clipOffsetsMs: List<Long> = emptyList()
+    private var preparedAudioClipId: String? = null
     private var tickerJob: Job? = null
 
     private val _isPlaying = MutableStateFlow(false)
@@ -40,19 +46,27 @@ class StudioPlayerController(
     private val listener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             _isPlaying.value = isPlaying
-            if (isPlaying) startTicker() else stopTicker()
+            if (isPlaying) {
+                startTicker()
+                syncAudioToGlobal(_globalPositionMs.value, forcePlay = true)
+            } else {
+                stopTicker()
+                if (audioPlayer.isPlaying) audioPlayer.pause()
+            }
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
             if (playbackState == Player.STATE_ENDED) {
                 _isPlaying.value = false
                 stopTicker()
+                if (audioPlayer.isPlaying) audioPlayer.pause()
             }
         }
 
         override fun onPlayerError(error: PlaybackException) {
             _isPlaying.value = false
             stopTicker()
+            if (audioPlayer.isPlaying) audioPlayer.pause()
             _playerError.value =
                 "Playback error (${error.errorCodeName}): ${error.localizedMessage ?: "Unsupported media"}"
         }
@@ -66,8 +80,14 @@ class StudioPlayerController(
         _playerError.value = null
     }
 
-    fun setTimelineClips(clips: List<TimelineClip>, preservePositionMs: Long? = null) {
+    fun setTimelineMedia(
+        clips: List<TimelineClip>,
+        audioClips: List<AudioClip> = emptyList(),
+        preservePositionMs: Long? = null
+    ) {
         currentClips = clips
+        currentAudioClips = audioClips
+
         val offsets = ArrayList<Long>(clips.size)
         var acc = 0L
         clips.forEach { clip ->
@@ -79,6 +99,9 @@ class StudioPlayerController(
         if (clips.isEmpty()) {
             player.pause()
             player.clearMediaItems()
+            audioPlayer.pause()
+            audioPlayer.clearMediaItems()
+            preparedAudioClipId = null
             _globalPositionMs.value = 0L
             return
         }
@@ -109,25 +132,27 @@ class StudioPlayerController(
         player.setMediaItems(mediaItems, targetIdx, localMs)
         player.prepare()
         _globalPositionMs.value = targetPos
+        syncAudioToGlobal(targetPos, forcePlay = player.isPlaying)
     }
 
     fun togglePlayPause() {
         if (currentClips.isEmpty()) return
         if (player.isPlaying) {
             player.pause()
+            if (audioPlayer.isPlaying) audioPlayer.pause()
         } else {
             val total = totalDurationMs()
             if (player.playbackState == Player.STATE_ENDED || _globalPositionMs.value >= total - 40L) {
                 seekToGlobal(0L)
             }
             player.play()
+            syncAudioToGlobal(_globalPositionMs.value, forcePlay = true)
         }
     }
 
     fun pause() {
-        if (player.isPlaying) {
-            player.pause()
-        }
+        if (player.isPlaying) player.pause()
+        if (audioPlayer.isPlaying) audioPlayer.pause()
     }
 
     fun seekToGlobal(globalMs: Long) {
@@ -139,9 +164,42 @@ class StudioPlayerController(
         val (idx, localMs) = mapGlobalToClip(clamped)
         player.seekTo(idx, localMs)
         _globalPositionMs.value = clamped
+        syncAudioToGlobal(clamped, forcePlay = player.isPlaying)
     }
 
     fun totalDurationMs(): Long = currentClips.sumOf { it.activeDurationMs }
+
+    private fun syncAudioToGlobal(globalMs: Long, forcePlay: Boolean) {
+        val activeAudio = currentAudioClips.firstOrNull { clip ->
+            globalMs >= clip.startTimeMs && globalMs < clip.startTimeMs + clip.activeDurationMs
+        }
+        if (activeAudio == null) {
+            if (audioPlayer.isPlaying) audioPlayer.pause()
+            return
+        }
+
+        val localAudioPos = (activeAudio.trimStartMs + (globalMs - activeAudio.startTimeMs))
+            .coerceIn(activeAudio.trimStartMs, activeAudio.trimEndMs)
+
+        if (preparedAudioClipId != activeAudio.id) {
+            preparedAudioClipId = activeAudio.id
+            val audioItem = MediaItem.Builder()
+                .setMediaId(activeAudio.id)
+                .setUri(Uri.parse(activeAudio.uriString))
+                .build()
+            audioPlayer.setMediaItem(audioItem, localAudioPos)
+            audioPlayer.prepare()
+        } else if (abs(audioPlayer.currentPosition - localAudioPos) > 140L) {
+            audioPlayer.seekTo(localAudioPos)
+        }
+
+        audioPlayer.volume = activeAudio.volume.coerceIn(0f, 1f)
+        if (forcePlay && !audioPlayer.isPlaying) {
+            audioPlayer.play()
+        } else if (!forcePlay && audioPlayer.isPlaying) {
+            audioPlayer.pause()
+        }
+    }
 
     private fun mapGlobalToClip(globalMs: Long): Pair<Int, Long> {
         if (currentClips.isEmpty()) return 0 to 0L
@@ -164,7 +222,9 @@ class StudioPlayerController(
                 if (idx in clipOffsetsMs.indices) {
                     val base = clipOffsetsMs[idx]
                     val local = player.currentPosition.coerceAtLeast(0L)
-                    _globalPositionMs.value = (base + local).coerceIn(0L, totalDurationMs())
+                    val gPos = (base + local).coerceIn(0L, totalDurationMs())
+                    _globalPositionMs.value = gPos
+                    syncAudioToGlobal(gPos, forcePlay = true)
                 }
                 delay(16L)
             }
@@ -180,5 +240,6 @@ class StudioPlayerController(
         stopTicker()
         player.removeListener(listener)
         player.release()
+        audioPlayer.release()
     }
 }
