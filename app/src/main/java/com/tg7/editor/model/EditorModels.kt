@@ -108,6 +108,57 @@ data class TransitionSpec(
     val defaultDurationMs: Long = 500L
 )
 
+enum class EffectShaderFamily(val wireName: String, val shaderIndex: Int) {
+    NONE("NONE", 0),
+    LUT_TONE("LUT_TONE", 1),
+    GLOW_BLOOM("GLOW_BLOOM", 2),
+    GLITCH_CYBER("GLITCH_CYBER", 3),
+    LENS_OPTICAL("LENS_OPTICAL", 4),
+    MOTION_PULSE("MOTION_PULSE", 5),
+    ARTISTIC_RETRO("ARTISTIC_RETRO", 6),
+    DUOTONE_EDGE("DUOTONE_EDGE", 7);
+
+    companion object {
+        fun fromWire(value: String): EffectShaderFamily {
+            return entries.firstOrNull { it.wireName == value } ?: NONE
+        }
+    }
+}
+
+data class VideoEffectSpec(
+    val id: String,
+    val name: String,
+    val category: String,
+    val shaderFamily: EffectShaderFamily,
+    val mode: Int,
+    val paramA: Float,
+    val paramB: Float,
+    val paramC: Float,
+    val defaultIntensity: Float = 0.85f
+)
+
+data class ClipColorGrade(
+    val brightness: Float = 0f,
+    val contrast: Float = 1f,
+    val saturation: Float = 1f,
+    val temperature: Float = 0f,
+    val vignette: Float = 0f
+) {
+    val isNeutral: Boolean
+        get() = kotlin.math.abs(brightness) < 0.005f &&
+            kotlin.math.abs(contrast - 1f) < 0.005f &&
+            kotlin.math.abs(saturation - 1f) < 0.005f &&
+            kotlin.math.abs(temperature) < 0.005f &&
+            vignette < 0.005f
+}
+
+data class ChromaKeyConfig(
+    val enabled: Boolean = false,
+    val keyColorHex: Long = 0xFF00C853L,
+    val similarity: Float = 0.35f,
+    val smoothness: Float = 0.12f
+)
+
 data class TimelineClip(
     val id: String = UUID.randomUUID().toString(),
     val uriString: String,
@@ -117,10 +168,42 @@ data class TimelineClip(
     val trimStartMs: Long = 0L,
     val trimEndMs: Long = sourceDurationMs,
     val outTransitionId: String? = null,
-    val outTransitionDurationMs: Long = 500L
+    val outTransitionDurationMs: Long = 500L,
+    val effectId: String? = null,
+    val effectIntensity: Float = 0.85f,
+    val brightness: Float = 0f,
+    val contrast: Float = 1f,
+    val saturation: Float = 1f,
+    val temperature: Float = 0f,
+    val vignette: Float = 0f,
+    val chromaEnabled: Boolean = false,
+    val chromaColorHex: Long = 0xFF00C853L,
+    val chromaSimilarity: Float = 0.35f,
+    val chromaSmoothness: Float = 0.12f
 ) {
     val activeDurationMs: Long
         get() = (trimEndMs - trimStartMs).coerceAtLeast(300L)
+
+    val hasCustomGrading: Boolean
+        get() = !colorGrade().isNeutral
+
+    val hasActiveVisualProcessing: Boolean
+        get() = !effectId.isNullOrBlank() || hasCustomGrading || chromaEnabled
+
+    fun colorGrade(): ClipColorGrade = ClipColorGrade(
+        brightness = brightness,
+        contrast = contrast,
+        saturation = saturation,
+        temperature = temperature,
+        vignette = vignette
+    )
+
+    fun chromaKey(): ChromaKeyConfig = ChromaKeyConfig(
+        enabled = chromaEnabled,
+        keyColorHex = chromaColorHex,
+        similarity = chromaSimilarity,
+        smoothness = chromaSmoothness
+    )
 }
 
 data class AudioClip(

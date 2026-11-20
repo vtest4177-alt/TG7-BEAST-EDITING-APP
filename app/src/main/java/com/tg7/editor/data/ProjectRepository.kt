@@ -56,7 +56,18 @@ class ProjectRepository(context: Context) {
                 trimStartMs = c.trimStartMs,
                 trimEndMs = c.trimEndMs,
                 outTransitionId = c.outTransitionId,
-                outTransitionDurationMs = c.outTransitionDurationMs
+                outTransitionDurationMs = c.outTransitionDurationMs,
+                effectId = c.effectId,
+                effectIntensity = c.effectIntensity,
+                brightness = c.brightness,
+                contrast = c.contrast,
+                saturation = c.saturation,
+                temperature = c.temperature,
+                vignette = c.vignette,
+                chromaEnabled = c.chromaEnabled,
+                chromaColorHex = c.chromaColorHex,
+                chromaSimilarity = c.chromaSimilarity,
+                chromaSmoothness = c.chromaSmoothness
             )
         }
         val audioEntities = project.audioClips.map { a ->
@@ -195,7 +206,18 @@ class ProjectRepository(context: Context) {
                     trimStartMs = c.trimStartMs,
                     trimEndMs = c.trimEndMs,
                     outTransitionId = c.outTransitionId,
-                    outTransitionDurationMs = c.outTransitionDurationMs
+                    outTransitionDurationMs = c.outTransitionDurationMs,
+                    effectId = c.effectId,
+                    effectIntensity = c.effectIntensity,
+                    brightness = c.brightness,
+                    contrast = c.contrast,
+                    saturation = c.saturation,
+                    temperature = c.temperature,
+                    vignette = c.vignette,
+                    chromaEnabled = c.chromaEnabled,
+                    chromaColorHex = c.chromaColorHex,
+                    chromaSimilarity = c.chromaSimilarity,
+                    chromaSmoothness = c.chromaSmoothness
                 )
             },
             audioClips = audioClips.sortedBy { it.startTimeMs }.map { a ->

@@ -16,12 +16,14 @@ import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
+import androidx.annotation.OptIn
 import androidx.core.content.FileProvider
 import com.airbnb.lottie.LottieCompositionFactory
 import com.airbnb.lottie.LottieDrawable
 import androidx.media3.common.Effect
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.BitmapOverlay
 import androidx.media3.effect.OverlayEffect
 import androidx.media3.effect.OverlaySettings
@@ -37,6 +39,7 @@ import androidx.media3.transformer.ProgressHolder
 import androidx.media3.transformer.Transformer
 import com.google.common.collect.ImmutableList
 import com.tg7.editor.engine.anim.OverlayAnimator
+import com.tg7.editor.engine.gl.ClipVideoEffectsEffect
 import com.tg7.editor.engine.gl.TransitionTimelineEffect
 import com.tg7.editor.model.EditorProject
 import com.tg7.editor.model.ExportResolution
@@ -49,6 +52,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 
+@OptIn(UnstableApi::class)
 class HardwareVideoExporter(context: Context) {
     private val appContext = context.applicationContext
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -142,8 +146,17 @@ class HardwareVideoExporter(context: Context) {
                     }
                 }
 
+                val clipEffectWindows = ClipVideoEffectsEffect.buildWindows(appContext, project.clips)
                 val transitionWindows = TransitionTimelineEffect.buildWindows(appContext, project.clips)
                 val compositionEffects = buildList<Effect> {
+                    if (clipEffectWindows.isNotEmpty()) {
+                        add(
+                            ClipVideoEffectsEffect(
+                                initialWindows = clipEffectWindows,
+                                realtimePositionMsProvider = null
+                            )
+                        )
+                    }
                     if (transitionWindows.isNotEmpty()) {
                         add(
                             TransitionTimelineEffect(

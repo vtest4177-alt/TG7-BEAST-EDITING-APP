@@ -40,6 +40,7 @@ import androidx.compose.material.icons.automirrored.rounded.Redo
 import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AspectRatio
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.AutoFixHigh
 import androidx.compose.material.icons.rounded.CheckBox
 import androidx.compose.material.icons.rounded.Close
@@ -49,6 +50,7 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.EmojiEmotions
+import androidx.compose.material.icons.rounded.FilterCenterFocus
 import androidx.compose.material.icons.rounded.Fullscreen
 import androidx.compose.material.icons.rounded.FullscreenExit
 import androidx.compose.material.icons.rounded.MusicNote
@@ -92,6 +94,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.airbnb.lottie.compose.LottieAnimation
@@ -153,6 +157,8 @@ fun EditorScreen(
     onAddStickerClick: () -> Unit,
     onOpenTransitionPicker: (cutIndex: Int) -> Unit,
     onOpenTransitionsDock: () -> Unit,
+    onOpenEffectsDock: () -> Unit,
+    onOpenChromaDock: () -> Unit,
     onToggleFullscreen: () -> Unit,
     onDismissError: () -> Unit
 ) {
@@ -440,6 +446,8 @@ fun EditorScreen(
                         onAddText = onAddTextClick,
                         onAddSticker = onAddStickerClick,
                         onTransitions = onOpenTransitionsDock,
+                        onEffects = onOpenEffectsDock,
+                        onChroma = onOpenChromaDock,
                         onTrimToggle = onToggleTrimPanel,
                         onSplit = onSplitAtPlayhead,
                         onDuplicate = onDuplicateSelected,
@@ -521,6 +529,8 @@ fun EditorScreen(
                 onAddText = onAddTextClick,
                 onAddSticker = onAddStickerClick,
                 onTransitions = onOpenTransitionsDock,
+                onEffects = onOpenEffectsDock,
+                onChroma = onOpenChromaDock,
                 onTrimToggle = onToggleTrimPanel,
                 onSplit = onSplitAtPlayhead,
                 onDuplicate = onDuplicateSelected,
@@ -785,6 +795,7 @@ private fun FloatingAddMediaButton(
     }
 }
 
+@OptIn(UnstableApi::class)
 @Composable
 private fun NativeVideoSurface(
     playerController: StudioPlayerController,
@@ -955,6 +966,8 @@ private fun ScrollablePhase2ToolDock(
     onAddText: () -> Unit,
     onAddSticker: () -> Unit,
     onTransitions: () -> Unit,
+    onEffects: () -> Unit,
+    onChroma: () -> Unit,
     onTrimToggle: () -> Unit,
     onSplit: () -> Unit,
     onDuplicate: () -> Unit,
@@ -975,7 +988,9 @@ private fun ScrollablePhase2ToolDock(
         verticalAlignment = Alignment.CenterVertically
     ) {
         TG7DockToolButton(icon = Icons.Rounded.Add, label = "Add Clip", tint = TG7Colors.NeonCyan, active = false, onClick = onAddMedia)
+        TG7DockToolButton(icon = Icons.Rounded.AutoAwesome, label = "Effects", tint = TG7Colors.NeonCyan, active = false, onClick = onEffects)
         TG7DockToolButton(icon = Icons.Rounded.AutoFixHigh, label = "Transitions", tint = TG7Colors.NeonCyan, active = false, onClick = onTransitions)
+        TG7DockToolButton(icon = Icons.Rounded.FilterCenterFocus, label = "Chroma", tint = Color(0xFF22C55E), active = false, onClick = onChroma)
         TG7DockToolButton(icon = Icons.Rounded.MusicNote, label = "Audio", tint = Color(0xFF22C55E), active = false, onClick = onAddAudio)
         TG7DockToolButton(icon = Icons.Rounded.TextFields, label = "Text", tint = Color(0xFFC084FC), active = false, onClick = onAddText)
         TG7DockToolButton(icon = Icons.Rounded.EmojiEmotions, label = "Sticker", tint = TG7Colors.BloodRed, active = false, onClick = onAddSticker)

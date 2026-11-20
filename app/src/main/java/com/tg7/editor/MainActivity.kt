@@ -28,6 +28,7 @@ import com.tg7.editor.crash.CrashErrorScreen
 import com.tg7.editor.crash.CrashHandler
 import com.tg7.editor.ui.components.AddStickerSheet
 import com.tg7.editor.ui.components.AddTextSheet
+import com.tg7.editor.ui.components.EffectsAndColorSheet
 import com.tg7.editor.ui.components.ExportSheet
 import com.tg7.editor.ui.components.RecentMediaSheet
 import com.tg7.editor.ui.components.TransitionPickerSheet
@@ -94,6 +95,8 @@ class MainActivity : ComponentActivity() {
                 val showTextSheet by viewModel.showTextSheet.collectAsState()
                 val showStickerSheet by viewModel.showStickerSheet.collectAsState()
                 val transitionCutIndex by viewModel.transitionCutIndex.collectAsState()
+                val showEffectsSheet by viewModel.showEffectsSheet.collectAsState()
+                val effectsInitialTab by viewModel.effectsInitialTab.collectAsState()
                 val showTrimPanel by viewModel.showTrimPanel.collectAsState()
                 val isFullscreenPreview by viewModel.isFullscreenPreview.collectAsState()
                 val isImporting by viewModel.isImporting.collectAsState()
@@ -231,6 +234,8 @@ class MainActivity : ComponentActivity() {
                         onAddStickerClick = { viewModel.setStickerSheetVisible(true) },
                         onOpenTransitionPicker = { cutIdx -> viewModel.openTransitionPicker(cutIdx) },
                         onOpenTransitionsDock = { viewModel.openTransitionPicker(null) },
+                        onOpenEffectsDock = { viewModel.openEffectsSheet(0) },
+                        onOpenChromaDock = { viewModel.openEffectsSheet(2) },
                         onToggleFullscreen = viewModel::toggleFullscreenPreview,
                         onDismissError = {
                             viewModel.playerController.clearError()
@@ -288,6 +293,24 @@ class MainActivity : ComponentActivity() {
                             onRemoveTransition = viewModel::removeTransition,
                             onDismiss = viewModel::closeTransitionPicker
                         )
+                    }
+
+                    if (showEffectsSheet) {
+                        val targetClip = activeProject.clips.firstOrNull { it.id == selection?.itemId }
+                            ?: activeProject.clips.firstOrNull()
+                        if (targetClip != null) {
+                            EffectsAndColorSheet(
+                                clip = targetClip,
+                                initialTab = effectsInitialTab,
+                                onApplyEffect = viewModel::applyClipEffect,
+                                onApplyEffectAll = viewModel::applyEffectToAllClips,
+                                onUpdateColorGrade = viewModel::updateClipColorGrade,
+                                onApplyColorGradeAll = viewModel::applyColorGradeToAllClips,
+                                onUpdateChromaKey = viewModel::updateClipChromaKey,
+                                onResetClipVisuals = viewModel::resetClipVisuals,
+                                onDismiss = viewModel::closeEffectsSheet
+                            )
+                        }
                     }
 
                     if (showExportSheet) {

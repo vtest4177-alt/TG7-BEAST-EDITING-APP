@@ -50,7 +50,18 @@ data class VideoClipEntity(
     val trimStartMs: Long,
     val trimEndMs: Long,
     val outTransitionId: String? = null,
-    val outTransitionDurationMs: Long = 500L
+    val outTransitionDurationMs: Long = 500L,
+    val effectId: String? = null,
+    val effectIntensity: Float = 0.85f,
+    val brightness: Float = 0f,
+    val contrast: Float = 1f,
+    val saturation: Float = 1f,
+    val temperature: Float = 0f,
+    val vignette: Float = 0f,
+    val chromaEnabled: Boolean = false,
+    val chromaColorHex: Long = 0xFF00C853L,
+    val chromaSimilarity: Float = 0.35f,
+    val chromaSmoothness: Float = 0.12f
 )
 
 @Entity(
@@ -219,7 +230,7 @@ interface ProjectDao {
         TextLayerEntity::class,
         StickerLayerEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -249,6 +260,22 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE video_clips ADD COLUMN effectId TEXT")
+                db.execSQL("ALTER TABLE video_clips ADD COLUMN effectIntensity REAL NOT NULL DEFAULT 0.85")
+                db.execSQL("ALTER TABLE video_clips ADD COLUMN brightness REAL NOT NULL DEFAULT 0.0")
+                db.execSQL("ALTER TABLE video_clips ADD COLUMN contrast REAL NOT NULL DEFAULT 1.0")
+                db.execSQL("ALTER TABLE video_clips ADD COLUMN saturation REAL NOT NULL DEFAULT 1.0")
+                db.execSQL("ALTER TABLE video_clips ADD COLUMN temperature REAL NOT NULL DEFAULT 0.0")
+                db.execSQL("ALTER TABLE video_clips ADD COLUMN vignette REAL NOT NULL DEFAULT 0.0")
+                db.execSQL("ALTER TABLE video_clips ADD COLUMN chromaEnabled INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE video_clips ADD COLUMN chromaColorHex INTEGER NOT NULL DEFAULT 4278241363")
+                db.execSQL("ALTER TABLE video_clips ADD COLUMN chromaSimilarity REAL NOT NULL DEFAULT 0.35")
+                db.execSQL("ALTER TABLE video_clips ADD COLUMN chromaSmoothness REAL NOT NULL DEFAULT 0.12")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -256,7 +283,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "tg7_editor_studio.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                     .fallbackToDestructiveMigration()
                     .build()
                     .also { INSTANCE = it }

@@ -11,6 +11,8 @@ import com.tg7.editor.engine.player.StudioPlayerController
 import com.tg7.editor.media.MediaPickerHelper
 import com.tg7.editor.model.AudioClip
 import com.tg7.editor.model.CanvasAspectRatio
+import com.tg7.editor.model.ChromaKeyConfig
+import com.tg7.editor.model.ClipColorGrade
 import com.tg7.editor.model.EditorProject
 import com.tg7.editor.model.ExportResolution
 import com.tg7.editor.model.ExportState
@@ -97,6 +99,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     private val _transitionCutIndex = MutableStateFlow<Int?>(null)
     val transitionCutIndex: StateFlow<Int?> = _transitionCutIndex.asStateFlow()
+
+    private val _showEffectsSheet = MutableStateFlow(false)
+    val showEffectsSheet: StateFlow<Boolean> = _showEffectsSheet.asStateFlow()
+
+    private val _effectsInitialTab = MutableStateFlow(0)
+    val effectsInitialTab: StateFlow<Int> = _effectsInitialTab.asStateFlow()
 
     private val _showTrimPanel = MutableStateFlow(false)
     val showTrimPanel: StateFlow<Boolean> = _showTrimPanel.asStateFlow()
@@ -243,6 +251,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         _showTextSheet.value = false
         _showStickerSheet.value = false
         _transitionCutIndex.value = null
+        _showEffectsSheet.value = false
         _isMultiSelectMode.value = false
         _multiSelectedIds.value = emptySet()
         _activeProjectId.value = null
@@ -872,6 +881,137 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         )
         playerController.refreshTransitionEffects(updatedClips)
         _transitionCutIndex.value = null
+    }
+
+    fun openEffectsSheet(initialTab: Int = 0) {
+        val proj = activeProject() ?: return
+        if (proj.clips.isEmpty()) {
+            _bannerMessage.value = "Add a video or photo clip first."
+            return
+        }
+        _effectsInitialTab.value = initialTab.coerceIn(0, 2)
+        _showEffectsSheet.value = true
+    }
+
+    fun closeEffectsSheet() {
+        _showEffectsSheet.value = false
+    }
+
+    fun applyClipEffect(clipId: String, effectId: String?, intensity: Float) {
+        val proj = activeProject() ?: return
+        val safeIntensity = intensity.coerceIn(0f, 1f)
+        val updatedClips = proj.clips.map { clip ->
+            if (clip.id == clipId) {
+                clip.copy(effectId = effectId, effectIntensity = safeIntensity)
+            } else clip
+        }
+        mutateProject(
+            newProject = proj.copy(clips = updatedClips),
+            recordHistoryThrottled = true,
+            rebuildPlayer = false
+        )
+        playerController.refreshClipEffects(updatedClips)
+    }
+
+    fun applyEffectToAllClips(effectId: String?, intensity: Float) {
+        val proj = activeProject() ?: return
+        val safeIntensity = intensity.coerceIn(0f, 1f)
+        val updatedClips = proj.clips.map { clip ->
+            clip.copy(effectId = effectId, effectIntensity = safeIntensity)
+        }
+        mutateProject(
+            newProject = proj.copy(clips = updatedClips),
+            rebuildPlayer = false
+        )
+        playerController.refreshClipEffects(updatedClips)
+        _bannerMessage.value = "Applied effect to all ${updatedClips.size} clips."
+    }
+
+    fun updateClipColorGrade(clipId: String, grade: ClipColorGrade) {
+        val proj = activeProject() ?: return
+        val updatedClips = proj.clips.map { clip ->
+            if (clip.id == clipId) {
+                clip.copy(
+                    brightness = grade.brightness.coerceIn(-0.5f, 0.5f),
+                    contrast = grade.contrast.coerceIn(0.4f, 2.0f),
+                    saturation = grade.saturation.coerceIn(0f, 2.0f),
+                    temperature = grade.temperature.coerceIn(-1f, 1f),
+                    vignette = grade.vignette.coerceIn(0f, 1f)
+                )
+            } else clip
+        }
+        mutateProject(
+            newProject = proj.copy(clips = updatedClips),
+            recordHistoryThrottled = true,
+            rebuildPlayer = false
+        )
+        playerController.refreshClipEffects(updatedClips)
+    }
+
+    fun applyColorGradeToAllClips(grade: ClipColorGrade) {
+        val proj = activeProject() ?: return
+        val updatedClips = proj.clips.map { clip ->
+            clip.copy(
+                brightness = grade.brightness.coerceIn(-0.5f, 0.5f),
+                contrast = grade.contrast.coerceIn(0.4f, 2.0f),
+                saturation = grade.saturation.coerceIn(0f, 2.0f),
+                temperature = grade.temperature.coerceIn(-1f, 1f),
+                vignette = grade.vignette.coerceIn(0f, 1f)
+            )
+        }
+        mutateProject(
+            newProject = proj.copy(clips = updatedClips),
+            rebuildPlayer = false
+        )
+        playerController.refreshClipEffects(updatedClips)
+        _bannerMessage.value = "Applied color grade to all ${updatedClips.size} clips."
+    }
+
+    fun updateClipChromaKey(clipId: String, config: ChromaKeyConfig) {
+        val proj = activeProject() ?: return
+        val updatedClips = proj.clips.map { clip ->
+            if (clip.id == clipId) {
+                clip.copy(
+                    chromaEnabled = config.enabled,
+                    chromaColorHex = config.keyColorHex,
+                    chromaSimilarity = config.similarity.coerceIn(0.05f, 0.85f),
+                    chromaSmoothness = config.smoothness.coerceIn(0.01f, 0.45f)
+                )
+            } else clip
+        }
+        mutateProject(
+            newProject = proj.copy(clips = updatedClips),
+            recordHistoryThrottled = true,
+            rebuildPlayer = false
+        )
+        playerController.refreshClipEffects(updatedClips)
+    }
+
+    fun resetClipVisuals(clipId: String) {
+        val proj = activeProject() ?: return
+        val updatedClips = proj.clips.map { clip ->
+            if (clip.id == clipId) {
+                clip.copy(
+                    effectId = null,
+                    effectIntensity = 0.85f,
+                    brightness = 0f,
+                    contrast = 1f,
+                    saturation = 1f,
+                    temperature = 0f,
+                    vignette = 0f,
+                    chromaEnabled = false,
+                    chromaColorHex = 0xFF00C853L,
+                    chromaSimilarity = 0.35f,
+                    chromaSmoothness = 0.12f
+                )
+            } else clip
+        }
+        mutateProject(
+            newProject = proj.copy(clips = updatedClips),
+            rebuildPlayer = false
+        )
+        playerController.refreshClipEffects(updatedClips)
+        _bannerMessage.value = "Reset clip VFX, Color & Chroma Key."
     }
 
     fun setExportSheetVisible(visible: Boolean) {

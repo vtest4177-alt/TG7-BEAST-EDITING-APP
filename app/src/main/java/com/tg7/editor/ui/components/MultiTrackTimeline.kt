@@ -69,7 +69,9 @@ private data class TrackBlock(
     val trimEndMs: Long,
     val maxSourceMs: Long,
     val baseColor: Color,
-    val accentColor: Color
+    val accentColor: Color,
+    val hasVfx: Boolean = false,
+    val hasChroma: Boolean = false
 )
 
 private data class CutJunction(
@@ -130,7 +132,9 @@ fun MultiTrackTimeline(
                         trimEndMs = clip.trimEndMs,
                         maxSourceMs = if (clip.kind == MediaKind.IMAGE) 30_000L else clip.sourceDurationMs,
                         baseColor = if (clip.kind == MediaKind.VIDEO) Color(0xFF0E2230) else Color(0xFF261220),
-                        accentColor = TG7Colors.NeonCyan
+                        accentColor = TG7Colors.NeonCyan,
+                        hasVfx = !clip.effectId.isNullOrBlank() || clip.hasCustomGrading,
+                        hasChroma = clip.chromaEnabled
                     )
                 )
                 videoAccMs += clip.activeDurationMs
@@ -598,6 +602,23 @@ fun MultiTrackTimeline(
                                 fontWeight = FontWeight.SemiBold
                             )
                         )
+                    }
+
+                    if (block.trackType == TrackType.VIDEO && (block.hasVfx || block.hasChroma) && widthPx > 32f) {
+                        if (block.hasVfx) {
+                            drawCircle(
+                                color = TG7Colors.NeonCyan,
+                                radius = 4.5f,
+                                center = Offset(drawLeft + widthPx - 14f, topY + 10f)
+                            )
+                        }
+                        if (block.hasChroma) {
+                            drawCircle(
+                                color = Color(0xFF22C55E),
+                                radius = 4.5f,
+                                center = Offset(drawLeft + widthPx - 26f, topY + 10f)
+                            )
+                        }
                     }
 
                     if (selection?.itemId == block.itemId && !isMultiSelectMode) {

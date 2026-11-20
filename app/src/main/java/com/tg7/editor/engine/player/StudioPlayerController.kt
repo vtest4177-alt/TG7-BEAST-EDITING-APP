@@ -2,10 +2,13 @@ package com.tg7.editor.engine.player
 
 import android.content.Context
 import android.net.Uri
+import androidx.annotation.OptIn
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import com.tg7.editor.engine.gl.ClipVideoEffectsEffect
 import com.tg7.editor.engine.gl.TransitionTimelineEffect
 import com.tg7.editor.model.AudioClip
 import com.tg7.editor.model.MediaKind
@@ -21,6 +24,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
+@OptIn(UnstableApi::class)
 class StudioPlayerController(
     context: Context,
     private val scope: CoroutineScope
@@ -35,6 +39,9 @@ class StudioPlayerController(
     private var preparedAudioClipId: String? = null
     private var tickerJob: Job? = null
 
+    private val clipEffectsEffect = ClipVideoEffectsEffect(
+        realtimePositionMsProvider = { _globalPositionMs.value }
+    )
     private val transitionEffect = TransitionTimelineEffect(
         realtimePositionMsProvider = { _globalPositionMs.value }
     )
@@ -78,13 +85,21 @@ class StudioPlayerController(
     }
 
     init {
-        player.setVideoEffects(listOf(transitionEffect))
+        player.setVideoEffects(listOf(clipEffectsEffect, transitionEffect))
         player.addListener(listener)
     }
 
     fun refreshTransitionEffects(clips: List<TimelineClip>) {
         currentClips = clips
         transitionEffect.updateWindows(TransitionTimelineEffect.buildWindows(appContext, clips))
+    }
+
+    fun refreshClipEffects(clips: List<TimelineClip>) {
+        currentClips = clips
+        clipEffectsEffect.updateWindows(ClipVideoEffectsEffect.buildWindows(appContext, clips))
+        if (!player.isPlaying && currentClips.isNotEmpty()) {
+            player.seekTo(player.currentMediaItemIndex, player.currentPosition)
+        }
     }
 
     fun clearError() {
@@ -106,6 +121,7 @@ class StudioPlayerController(
             acc += clip.activeDurationMs
         }
         clipOffsetsMs = offsets
+        clipEffectsEffect.updateWindows(ClipVideoEffectsEffect.buildWindows(appContext, clips))
         transitionEffect.updateWindows(TransitionTimelineEffect.buildWindows(appContext, clips))
 
         if (clips.isEmpty()) {
