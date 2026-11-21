@@ -12,7 +12,10 @@ import androidx.media3.effect.BaseGlShaderProgram
 import androidx.media3.effect.GlEffect
 import androidx.media3.effect.GlShaderProgram
 import com.tg7.editor.data.EffectsManifestLoader
+import com.tg7.editor.engine.anim.KeyframeEngine
+import com.tg7.editor.model.BlendModePreset
 import com.tg7.editor.model.EffectShaderFamily
+import com.tg7.editor.model.KeyframeNode
 import com.tg7.editor.model.TimelineClip
 import com.tg7.editor.model.VideoEffectSpec
 import java.util.concurrent.atomic.AtomicReference
@@ -33,7 +36,16 @@ data class ClipEffectWindow(
     val chromaG: Float,
     val chromaB: Float,
     val chromaSimilarity: Float,
-    val chromaSmoothness: Float
+    val chromaSmoothness: Float,
+    val scale: Float = 1.0f,
+    val panX: Float = 0f,
+    val panY: Float = 0f,
+    val rotationDeg: Float = 0f,
+    val flipHorizontal: Boolean = false,
+    val flipVertical: Boolean = false,
+    val opacity: Float = 1.0f,
+    val blendMode: BlendModePreset = BlendModePreset.NORMAL,
+    val keyframes: List<KeyframeNode> = emptyList()
 )
 
 @OptIn(UnstableApi::class)
@@ -87,7 +99,16 @@ class ClipVideoEffectsEffect(
                             chromaG = g,
                             chromaB = b,
                             chromaSimilarity = clip.chromaSimilarity.coerceIn(0.05f, 0.85f),
-                            chromaSmoothness = clip.chromaSmoothness.coerceIn(0.01f, 0.45f)
+                            chromaSmoothness = clip.chromaSmoothness.coerceIn(0.01f, 0.45f),
+                            scale = clip.scale.coerceIn(0.25f, 4.0f),
+                            panX = clip.panX.coerceIn(-0.8f, 0.8f),
+                            panY = clip.panY.coerceIn(-0.8f, 0.8f),
+                            rotationDeg = clip.rotationDeg,
+                            flipHorizontal = clip.flipHorizontal,
+                            flipVertical = clip.flipVertical,
+                            opacity = clip.opacity.coerceIn(0f, 1f),
+                            blendMode = clip.blendMode,
+                            keyframes = clip.keyframes
                         )
                     )
                 }
@@ -158,7 +179,21 @@ private class ClipVideoEffectsShaderProgram(
 
         val spec = active.effectSpec
         val familyIdx = spec?.shaderFamily?.shaderIndex ?: EffectShaderFamily.NONE.shaderIndex
-        val timeSec = ((currentTimeUs - active.startTimeUs).coerceAtLeast(0L) / 1_000_000f)
+        val localMs = ((currentTimeUs - active.startTimeUs).coerceAtLeast(0L) / 1000L)
+        val timeSec = localMs / 1000f
+
+        val kf = KeyframeEngine.evaluate(
+            keyframes = active.keyframes,
+            basePosX = 0.5f + active.panX,
+            basePosY = 0.5f + active.panY,
+            baseScale = active.scale,
+            baseRotationDeg = active.rotationDeg,
+            baseOpacity = active.opacity,
+            localTimeMs = localMs
+        )
+        val resolvedPanX = (kf.posX - 0.5f).coerceIn(-0.8f, 0.8f)
+        val resolvedPanY = (kf.posY - 0.5f).coerceIn(-0.8f, 0.8f)
+        val resolvedRad = Math.toRadians(kf.rotationDeg.toDouble()).toFloat()
 
         try {
             fxProgram.use()
@@ -186,6 +221,15 @@ private class ClipVideoEffectsShaderProgram(
             fxProgram.setFloatUniform("uChromaB", active.chromaB)
             fxProgram.setFloatUniform("uChromaSimilarity", active.chromaSimilarity)
             fxProgram.setFloatUniform("uChromaSmoothness", active.chromaSmoothness)
+
+            fxProgram.setFloatUniform("uPanX", resolvedPanX)
+            fxProgram.setFloatUniform("uPanY", resolvedPanY)
+            fxProgram.setFloatUniform("uScale", kf.scale.coerceIn(0.2f, 4.0f))
+            fxProgram.setFloatUniform("uRotationRad", resolvedRad)
+            fxProgram.setIntUniform("uFlipH", if (active.flipHorizontal) 1 else 0)
+            fxProgram.setIntUniform("uFlipV", if (active.flipVertical) 1 else 0)
+            fxProgram.setFloatUniform("uOpacity", kf.opacity.coerceIn(0f, 1f))
+            fxProgram.setIntUniform("uBlendMode", active.blendMode.shaderIndex)
 
             fxProgram.bindAttributesAndUniforms()
             GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)

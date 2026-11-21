@@ -8,10 +8,13 @@ import com.tg7.editor.data.db.ProjectWithLayers
 import com.tg7.editor.data.db.StickerLayerEntity
 import com.tg7.editor.data.db.TextLayerEntity
 import com.tg7.editor.data.db.VideoClipEntity
+import com.tg7.editor.engine.anim.KeyframeEngine
 import com.tg7.editor.model.AudioClip
+import com.tg7.editor.model.BlendModePreset
 import com.tg7.editor.model.CanvasAspectRatio
 import com.tg7.editor.model.EditorProject
 import com.tg7.editor.model.MediaKind
+import com.tg7.editor.model.SpeedRampPreset
 import com.tg7.editor.model.StickerLayer
 import com.tg7.editor.model.StickerPreset
 import com.tg7.editor.model.TextFontFamily
@@ -67,7 +70,18 @@ class ProjectRepository(context: Context) {
                 chromaEnabled = c.chromaEnabled,
                 chromaColorHex = c.chromaColorHex,
                 chromaSimilarity = c.chromaSimilarity,
-                chromaSmoothness = c.chromaSmoothness
+                chromaSmoothness = c.chromaSmoothness,
+                speed = c.speed,
+                speedRamp = c.speedRamp.name,
+                scale = c.scale,
+                panX = c.panX,
+                panY = c.panY,
+                rotationDeg = c.rotationDeg,
+                flipHorizontal = c.flipHorizontal,
+                flipVertical = c.flipVertical,
+                opacity = c.opacity,
+                blendMode = c.blendMode.name,
+                keyframesJson = KeyframeEngine.keyframesToJson(c.keyframes)
             )
         }
         val audioEntities = project.audioClips.map { a ->
@@ -80,7 +94,11 @@ class ProjectRepository(context: Context) {
                 sourceDurationMs = a.sourceDurationMs,
                 trimStartMs = a.trimStartMs,
                 trimEndMs = a.trimEndMs,
-                volume = a.volume
+                volume = a.volume,
+                fadeInMs = a.fadeInMs,
+                fadeOutMs = a.fadeOutMs,
+                waveformJson = KeyframeEngine.floatListToJson(a.waveformPeaks),
+                beatsJson = KeyframeEngine.longListToJson(a.beatMarkersMs)
             )
         }
         val textEntities = project.textLayers.map { t ->
@@ -99,7 +117,11 @@ class ProjectRepository(context: Context) {
                 fontFamily = t.fontFamily.wireName,
                 bgColorHex = t.bgColorHex,
                 hasOutline = t.hasOutline,
-                letterSpacingEm = t.letterSpacingEm
+                letterSpacingEm = t.letterSpacingEm,
+                scale = t.scale,
+                rotationDeg = t.rotationDeg,
+                opacity = t.opacity,
+                keyframesJson = KeyframeEngine.keyframesToJson(t.keyframes)
             )
         }
         val stickerEntities = project.stickerLayers.map { s ->
@@ -114,7 +136,11 @@ class ProjectRepository(context: Context) {
                 sizeDp = s.sizeDp,
                 tintHex = s.tintHex,
                 lottieAssetPath = s.lottieAssetPath,
-                label = s.label
+                label = s.label,
+                scale = s.scale,
+                rotationDeg = s.rotationDeg,
+                opacity = s.opacity,
+                keyframesJson = KeyframeEngine.keyframesToJson(s.keyframes)
             )
         }
         dao.saveProjectFull(
@@ -217,7 +243,18 @@ class ProjectRepository(context: Context) {
                     chromaEnabled = c.chromaEnabled,
                     chromaColorHex = c.chromaColorHex,
                     chromaSimilarity = c.chromaSimilarity,
-                    chromaSmoothness = c.chromaSmoothness
+                    chromaSmoothness = c.chromaSmoothness,
+                    speed = c.speed,
+                    speedRamp = runCatching { SpeedRampPreset.valueOf(c.speedRamp) }.getOrDefault(SpeedRampPreset.NONE),
+                    scale = c.scale,
+                    panX = c.panX,
+                    panY = c.panY,
+                    rotationDeg = c.rotationDeg,
+                    flipHorizontal = c.flipHorizontal,
+                    flipVertical = c.flipVertical,
+                    opacity = c.opacity,
+                    blendMode = runCatching { BlendModePreset.valueOf(c.blendMode) }.getOrDefault(BlendModePreset.NORMAL),
+                    keyframes = KeyframeEngine.keyframesFromJson(c.keyframesJson)
                 )
             },
             audioClips = audioClips.sortedBy { it.startTimeMs }.map { a ->
@@ -229,7 +266,11 @@ class ProjectRepository(context: Context) {
                     sourceDurationMs = a.sourceDurationMs,
                     trimStartMs = a.trimStartMs,
                     trimEndMs = a.trimEndMs,
-                    volume = a.volume
+                    volume = a.volume,
+                    fadeInMs = a.fadeInMs,
+                    fadeOutMs = a.fadeOutMs,
+                    waveformPeaks = KeyframeEngine.floatListFromJson(a.waveformJson),
+                    beatMarkersMs = KeyframeEngine.longListFromJson(a.beatsJson)
                 )
             },
             textLayers = textLayers.sortedBy { it.startTimeMs }.map { t ->
@@ -247,7 +288,11 @@ class ProjectRepository(context: Context) {
                     fontFamily = TextFontFamily.fromWire(t.fontFamily),
                     bgColorHex = t.bgColorHex,
                     hasOutline = t.hasOutline,
-                    letterSpacingEm = t.letterSpacingEm
+                    letterSpacingEm = t.letterSpacingEm,
+                    scale = t.scale,
+                    rotationDeg = t.rotationDeg,
+                    opacity = t.opacity,
+                    keyframes = KeyframeEngine.keyframesFromJson(t.keyframesJson)
                 )
             },
             stickerLayers = stickerLayers.sortedBy { it.startTimeMs }.map { s ->
@@ -262,7 +307,11 @@ class ProjectRepository(context: Context) {
                     sizeDp = s.sizeDp,
                     tintHex = s.tintHex,
                     lottieAssetPath = s.lottieAssetPath,
-                    label = s.label
+                    label = s.label,
+                    scale = s.scale,
+                    rotationDeg = s.rotationDeg,
+                    opacity = s.opacity,
+                    keyframes = KeyframeEngine.keyframesFromJson(s.keyframesJson)
                 )
             }
         )

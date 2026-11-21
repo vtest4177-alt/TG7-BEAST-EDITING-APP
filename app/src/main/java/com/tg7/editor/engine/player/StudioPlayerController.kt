@@ -102,6 +102,11 @@ class StudioPlayerController(
         }
     }
 
+    fun refreshAudioClips(audioClips: List<AudioClip>) {
+        currentAudioClips = audioClips
+        syncAudioToGlobal(_globalPositionMs.value, forcePlay = player.isPlaying)
+    }
+
     fun clearError() {
         _playerError.value = null
     }
@@ -221,7 +226,19 @@ class StudioPlayerController(
             audioPlayer.seekTo(localAudioPos)
         }
 
-        audioPlayer.volume = activeAudio.volume.coerceIn(0f, 1f)
+        val activeDur = activeAudio.activeDurationMs.coerceAtLeast(300L)
+        val localTimelineMs = (globalMs - activeAudio.startTimeMs).coerceIn(0L, activeDur)
+        var fadeEnv = 1.0f
+        if (activeAudio.fadeInMs > 0L && localTimelineMs < activeAudio.fadeInMs) {
+            fadeEnv *= (localTimelineMs.toFloat() / activeAudio.fadeInMs.toFloat()).coerceIn(0f, 1f)
+        }
+        if (activeAudio.fadeOutMs > 0L) {
+            val remMs = (activeDur - localTimelineMs).coerceAtLeast(0L)
+            if (remMs < activeAudio.fadeOutMs) {
+                fadeEnv *= (remMs.toFloat() / activeAudio.fadeOutMs.toFloat()).coerceIn(0f, 1f)
+            }
+        }
+        audioPlayer.volume = (activeAudio.volume * fadeEnv).coerceIn(0f, 1f)
         if (forcePlay && !audioPlayer.isPlaying) {
             audioPlayer.play()
         } else if (!forcePlay && audioPlayer.isPlaying) {
@@ -232,11 +249,18 @@ class StudioPlayerController(
     private fun mapGlobalToClip(globalMs: Long): Pair<Int, Long> {
         if (currentClips.isEmpty()) return 0 to 0L
         for (i in currentClips.indices) {
+            val clip = currentClips[i]
             val start = clipOffsetsMs[i]
-            val dur = currentClips[i].activeDurationMs
+            val dur = clip.activeDurationMs
             if (globalMs <= start + dur || i == currentClips.lastIndex) {
-                val local = (globalMs - start).coerceIn(0L, (dur - 10L).coerceAtLeast(0L))
-                return i to local
+                val timelineLocal = (globalMs - start).coerceIn(0L, dur)
+                val sourceLocal = if (clip.kind == MediaKind.IMAGE) {
+                    timelineLocal.coerceIn(0L, (dur - 10L).coerceAtLeast(0L))
+                } else {
+                    val maxSpan = (clip.trimEndMs - clip.trimStartMs - 10L).coerceAtLeast(0L)
+                    (timelineLocal * clip.effectiveSpeed).toLong().coerceIn(0L, maxSpan)
+                }
+                return i to sourceLocal
             }
         }
         return 0 to 0L
@@ -247,11 +271,28 @@ class StudioPlayerController(
         tickerJob = scope.launch(Dispatchers.Main.immediate) {
             while (isActive && player.isPlaying) {
                 val idx = player.currentMediaItemIndex
-                if (idx in clipOffsetsMs.indices) {
+                if (idx in clipOffsetsMs.indices && idx in currentClips.indices) {
+                    val clip = currentClips[idx]
                     val base = clipOffsetsMs[idx]
-                    val local = player.currentPosition.coerceAtLeast(0L)
-                    val gPos = (base + local).coerceIn(0L, totalDurationMs())
+                    val sourceLocal = player.currentPosition.coerceAtLeast(0L)
+                    val timelineLocal = if (clip.kind == MediaKind.IMAGE) {
+                        sourceLocal
+                    } else {
+                        (sourceLocal / clip.effectiveSpeed).toLong()
+                    }
+                    val gPos = (base + timelineLocal).coerceIn(0L, totalDurationMs())
                     _globalPositionMs.value = gPos
+
+                    val progress = (timelineLocal.toFloat() / clip.activeDurationMs.coerceAtLeast(1L)).coerceIn(0f, 1f)
+                    val targetSpeed = if (clip.kind == MediaKind.IMAGE) {
+                        1.0f
+                    } else {
+                        clip.speedRamp.evaluateAt(progress, clip.speed)
+                    }
+                    if (abs(player.playbackParameters.speed - targetSpeed) > 0.02f) {
+                        player.setPlaybackSpeed(targetSpeed)
+                    }
+
                     syncAudioToGlobal(gPos, forcePlay = true)
                 }
                 delay(16L)

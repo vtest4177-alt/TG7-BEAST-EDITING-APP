@@ -36,6 +36,8 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -71,7 +73,10 @@ private data class TrackBlock(
     val baseColor: Color,
     val accentColor: Color,
     val hasVfx: Boolean = false,
-    val hasChroma: Boolean = false
+    val hasChroma: Boolean = false,
+    val waveformPeaks: List<Float> = emptyList(),
+    val beatOffsetsMs: List<Long> = emptyList(),
+    val keyframeOffsetsMs: List<Long> = emptyList()
 )
 
 private data class CutJunction(
@@ -120,12 +125,15 @@ fun MultiTrackTimeline(
         buildList {
             var videoAccMs = 0L
             project.clips.forEachIndexed { idx, clip ->
+                val speedTag = if (abs(clip.effectiveSpeed - 1.0f) > 0.05f) {
+                    String.format(Locale.US, " · %.1fx", clip.effectiveSpeed)
+                } else ""
                 add(
                     TrackBlock(
                         trackType = TrackType.VIDEO,
                         itemId = clip.id,
                         index = idx,
-                        label = "${clip.displayName.take(10)} · ${MediaPickerHelper.formatDuration(clip.activeDurationMs)}",
+                        label = "${clip.displayName.take(10)} · ${MediaPickerHelper.formatDuration(clip.activeDurationMs)}$speedTag",
                         startMs = videoAccMs,
                         durationMs = clip.activeDurationMs,
                         trimStartMs = clip.trimStartMs,
@@ -133,14 +141,18 @@ fun MultiTrackTimeline(
                         maxSourceMs = if (clip.kind == MediaKind.IMAGE) 30_000L else clip.sourceDurationMs,
                         baseColor = if (clip.kind == MediaKind.VIDEO) Color(0xFF0E2230) else Color(0xFF261220),
                         accentColor = TG7Colors.NeonCyan,
-                        hasVfx = !clip.effectId.isNullOrBlank() || clip.hasCustomGrading,
-                        hasChroma = clip.chromaEnabled
+                        hasVfx = !clip.effectId.isNullOrBlank() || clip.hasCustomGrading || clip.hasCustomTransform,
+                        hasChroma = clip.chromaEnabled,
+                        keyframeOffsetsMs = clip.keyframes.map { it.timeOffsetMs }
                     )
                 )
                 videoAccMs += clip.activeDurationMs
             }
 
             project.audioClips.forEachIndexed { idx, audio ->
+                val beats = audio.beatMarkersMs
+                    .filter { it in audio.trimStartMs..audio.trimEndMs }
+                    .map { it - audio.trimStartMs }
                 add(
                     TrackBlock(
                         trackType = TrackType.AUDIO,
@@ -153,7 +165,9 @@ fun MultiTrackTimeline(
                         trimEndMs = audio.trimEndMs,
                         maxSourceMs = audio.sourceDurationMs,
                         baseColor = Color(0xFF14261E),
-                        accentColor = Color(0xFF22C55E)
+                        accentColor = Color(0xFF22C55E),
+                        waveformPeaks = audio.waveformPeaks,
+                        beatOffsetsMs = beats
                     )
                 )
             }
@@ -171,7 +185,8 @@ fun MultiTrackTimeline(
                         trimEndMs = text.durationMs,
                         maxSourceMs = 60_000L,
                         baseColor = Color(0xFF241736),
-                        accentColor = Color(0xFFC084FC)
+                        accentColor = Color(0xFFC084FC),
+                        keyframeOffsetsMs = text.keyframes.map { it.timeOffsetMs }
                     )
                 )
             }
@@ -189,7 +204,8 @@ fun MultiTrackTimeline(
                         trimEndMs = sticker.durationMs,
                         maxSourceMs = 60_000L,
                         baseColor = Color(0xFF2B1218),
-                        accentColor = TG7Colors.BloodRed
+                        accentColor = TG7Colors.BloodRed,
+                        keyframeOffsetsMs = sticker.keyframes.map { it.timeOffsetMs }
                     )
                 )
             }
@@ -564,19 +580,52 @@ fun MultiTrackTimeline(
                     )
 
                     if (block.trackType == TrackType.AUDIO && widthPx > 32f) {
-                        var wx = drawLeft + 10f
-                        var barIdx = 0
-                        while (wx < drawLeft + widthPx - 10f) {
-                            val barH = if (barIdx % 3 == 0) laneHeightPx * 0.52f else laneHeightPx * 0.3f
-                            val barTop = topY + (laneHeightPx - barH) / 2f
-                            drawLine(
-                                color = block.accentColor.copy(alpha = 0.35f),
-                                start = Offset(wx, barTop),
-                                end = Offset(wx, barTop + barH),
-                                strokeWidth = 3f
-                            )
-                            wx += 10f
-                            barIdx++
+                        val peaks = block.waveformPeaks
+                        if (peaks.isNotEmpty()) {
+                            val barCount = ((widthPx - 12f) / 7f).toInt().coerceIn(4, peaks.size * 2)
+                            val midY = topY + laneHeightPx / 2f
+                            for (b in 0 until barCount) {
+                                val pIdx = ((b.toFloat() / barCount) * peaks.size).toInt().coerceIn(0, peaks.lastIndex)
+                                val amp = peaks[pIdx].coerceIn(0.12f, 1.0f)
+                                val barH = laneHeightPx * 0.62f * amp
+                                val wx = drawLeft + 6f + b * ((widthPx - 12f) / barCount)
+                                drawLine(
+                                    color = block.accentColor.copy(alpha = 0.45f),
+                                    start = Offset(wx, midY - barH / 2f),
+                                    end = Offset(wx, midY + barH / 2f),
+                                    strokeWidth = 3f,
+                                    cap = StrokeCap.Round
+                                )
+                            }
+                        } else {
+                            var wx = drawLeft + 10f
+                            var barIdx = 0
+                            while (wx < drawLeft + widthPx - 10f) {
+                                val barH = if (barIdx % 3 == 0) laneHeightPx * 0.52f else laneHeightPx * 0.3f
+                                val barTop = topY + (laneHeightPx - barH) / 2f
+                                drawLine(
+                                    color = block.accentColor.copy(alpha = 0.35f),
+                                    start = Offset(wx, barTop),
+                                    end = Offset(wx, barTop + barH),
+                                    strokeWidth = 3f
+                                )
+                                wx += 10f
+                                barIdx++
+                            }
+                        }
+
+                        // Cyan Beat Markers on Audio Track
+                        block.beatOffsetsMs.forEach { beatOffset ->
+                            val frac = (beatOffset.toFloat() / block.durationMs.coerceAtLeast(1L)).coerceIn(0f, 1f)
+                            val bx = drawLeft + frac * widthPx
+                            val d = Path().apply {
+                                moveTo(bx, topY + 2f)
+                                lineTo(bx + 4f, topY + 6f)
+                                lineTo(bx, topY + 10f)
+                                lineTo(bx - 4f, topY + 6f)
+                                close()
+                            }
+                            drawPath(path = d, color = TG7Colors.NeonCyan)
                         }
                     }
 
@@ -618,6 +667,24 @@ fun MultiTrackTimeline(
                                 radius = 4.5f,
                                 center = Offset(drawLeft + widthPx - 26f, topY + 10f)
                             )
+                        }
+                    }
+
+                    // Keyframe Diamond Dots along bottom edge of block
+                    if (block.keyframeOffsetsMs.isNotEmpty() && widthPx > 28f) {
+                        val durF = block.durationMs.coerceAtLeast(1L).toFloat()
+                        val ky = topY + laneHeightPx - 6f
+                        block.keyframeOffsetsMs.forEach { kfMs ->
+                            val frac = (kfMs / durF).coerceIn(0f, 1f)
+                            val kx = drawLeft + 8f + frac * (widthPx - 16f).coerceAtLeast(4f)
+                            val d = Path().apply {
+                                moveTo(kx, ky - 4f)
+                                lineTo(kx + 4f, ky)
+                                lineTo(kx, ky + 4f)
+                                lineTo(kx - 4f, ky)
+                                close()
+                            }
+                            drawPath(path = d, color = Color(0xFFFACC15))
                         }
                     }
 

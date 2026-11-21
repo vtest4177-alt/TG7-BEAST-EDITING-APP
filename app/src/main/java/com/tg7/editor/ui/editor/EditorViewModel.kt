@@ -6,19 +6,25 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.tg7.editor.data.ProjectRepository
 import com.tg7.editor.data.RecentMediaLoader
+import com.tg7.editor.engine.audio.AudioWaveformExtractor
+import com.tg7.editor.engine.audio.VoiceoverRecorder
 import com.tg7.editor.engine.export.HardwareVideoExporter
 import com.tg7.editor.engine.player.StudioPlayerController
+import com.tg7.editor.media.FreezeFrameHelper
 import com.tg7.editor.media.MediaPickerHelper
 import com.tg7.editor.model.AudioClip
+import com.tg7.editor.model.BlendModePreset
 import com.tg7.editor.model.CanvasAspectRatio
 import com.tg7.editor.model.ChromaKeyConfig
 import com.tg7.editor.model.ClipColorGrade
 import com.tg7.editor.model.EditorProject
 import com.tg7.editor.model.ExportResolution
 import com.tg7.editor.model.ExportState
+import com.tg7.editor.model.KeyframeNode
 import com.tg7.editor.model.LottieStickerSpec
 import com.tg7.editor.model.MediaKind
 import com.tg7.editor.model.RecentMediaItem
+import com.tg7.editor.model.SpeedRampPreset
 import com.tg7.editor.model.StickerLayer
 import com.tg7.editor.model.StickerPreset
 import com.tg7.editor.model.TextFontFamily
@@ -31,6 +37,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -39,6 +46,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private val repository = ProjectRepository(appContext)
     val playerController = StudioPlayerController(appContext, viewModelScope)
     private val exporter = HardwareVideoExporter(appContext)
+    private val voiceoverRecorder = VoiceoverRecorder(appContext)
 
     private val _projects = MutableStateFlow<List<EditorProject>>(emptyList())
     val projects: StateFlow<List<EditorProject>> = _projects.asStateFlow()
@@ -106,6 +114,30 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private val _effectsInitialTab = MutableStateFlow(0)
     val effectsInitialTab: StateFlow<Int> = _effectsInitialTab.asStateFlow()
 
+    private val _showSpeedTransformSheet = MutableStateFlow(false)
+    val showSpeedTransformSheet: StateFlow<Boolean> = _showSpeedTransformSheet.asStateFlow()
+
+    private val _speedTransformInitialTab = MutableStateFlow(0)
+    val speedTransformInitialTab: StateFlow<Int> = _speedTransformInitialTab.asStateFlow()
+
+    private val _showKeyframeSheet = MutableStateFlow(false)
+    val showKeyframeSheet: StateFlow<Boolean> = _showKeyframeSheet.asStateFlow()
+
+    private val _showAudioStudioSheet = MutableStateFlow(false)
+    val showAudioStudioSheet: StateFlow<Boolean> = _showAudioStudioSheet.asStateFlow()
+
+    private val _audioStudioInitialTab = MutableStateFlow(0)
+    val audioStudioInitialTab: StateFlow<Int> = _audioStudioInitialTab.asStateFlow()
+
+    private val _isRecordingVoiceover = MutableStateFlow(false)
+    val isRecordingVoiceover: StateFlow<Boolean> = _isRecordingVoiceover.asStateFlow()
+
+    private val _voiceoverAmplitude = MutableStateFlow(0f)
+    val voiceoverAmplitude: StateFlow<Float> = _voiceoverAmplitude.asStateFlow()
+
+    private val _voiceoverElapsedMs = MutableStateFlow(0L)
+    val voiceoverElapsedMs: StateFlow<Long> = _voiceoverElapsedMs.asStateFlow()
+
     private val _showTrimPanel = MutableStateFlow(false)
     val showTrimPanel: StateFlow<Boolean> = _showTrimPanel.asStateFlow()
 
@@ -119,6 +151,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     val bannerMessage: StateFlow<String?> = _bannerMessage.asStateFlow()
 
     private var trimSyncJob: Job? = null
+    private var voiceoverPollJob: Job? = null
     private var lastContinuousHistoryMs = 0L
 
     init {
@@ -241,10 +274,14 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         _isFullscreenPreview.value = false
         playerController.setTimelineMedia(proj.clips, proj.audioClips, preservePositionMs = 0L)
         viewModelScope.launch { repository.markSessionActive(proj.id) }
+        proj.audioClips.filter { it.waveformPeaks.isEmpty() }.forEach { audio ->
+            analyzeAudioInBackground(proj.id, audio.id, audio.uriString, audio.sourceDurationMs)
+        }
     }
 
     fun closeEditor() {
         playerController.pause()
+        cancelVoiceoverIfRecording()
         _isFullscreenPreview.value = false
         _showTrimPanel.value = false
         _showImportSheet.value = false
@@ -252,6 +289,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         _showStickerSheet.value = false
         _transitionCutIndex.value = null
         _showEffectsSheet.value = false
+        _showSpeedTransformSheet.value = false
+        _showKeyframeSheet.value = false
+        _showAudioStudioSheet.value = false
         _isMultiSelectMode.value = false
         _multiSelectedIds.value = emptySet()
         _activeProjectId.value = null
@@ -309,14 +349,20 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val proj = activeProject() ?: return
         val playheadMs = playerController.globalPositionMs.value
         viewModelScope.launch {
-            val audio = MediaPickerHelper.probeAudioUri(appContext, uri, playheadMs)
-            if (audio == null) {
+            val probed = MediaPickerHelper.probeAudioUri(appContext, uri, playheadMs)
+            if (probed == null) {
                 _bannerMessage.value = "Could not load selected audio file."
                 return@launch
             }
+            val analysis = AudioWaveformExtractor.analyze(appContext, probed.uriString, probed.sourceDurationMs)
+            val enriched = probed.copy(
+                waveformPeaks = analysis.waveformPeaks,
+                beatMarkersMs = analysis.beatMarkersMs
+            )
+            val latest = activeProject() ?: proj
             mutateProject(
-                newProject = proj.copy(audioClips = proj.audioClips + audio),
-                newSelection = TimelineSelection(TrackType.AUDIO, audio.id),
+                newProject = latest.copy(audioClips = latest.audioClips + enriched),
+                newSelection = TimelineSelection(TrackType.AUDIO, enriched.id),
                 rebuildPlayer = true
             )
             _showImportSheet.value = false
@@ -1014,6 +1060,331 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         _bannerMessage.value = "Reset clip VFX, Color & Chroma Key."
     }
 
+    fun openSpeedTransformSheet(initialTab: Int = 0) {
+        val proj = activeProject() ?: return
+        if (proj.clips.isEmpty()) {
+            _bannerMessage.value = "Add a video or photo clip first."
+            return
+        }
+        _speedTransformInitialTab.value = initialTab.coerceIn(0, 1)
+        _showSpeedTransformSheet.value = true
+    }
+
+    fun closeSpeedTransformSheet() {
+        _showSpeedTransformSheet.value = false
+    }
+
+    fun openKeyframeSheet() {
+        val proj = activeProject() ?: return
+        if (proj.clips.isEmpty() && proj.textLayers.isEmpty() && proj.stickerLayers.isEmpty()) {
+            _bannerMessage.value = "Add a clip, text, or sticker first."
+            return
+        }
+        _showKeyframeSheet.value = true
+    }
+
+    fun closeKeyframeSheet() {
+        _showKeyframeSheet.value = false
+    }
+
+    fun openAudioStudioSheet(initialTab: Int = 0) {
+        _audioStudioInitialTab.value = initialTab.coerceIn(0, 1)
+        _showAudioStudioSheet.value = true
+    }
+
+    fun closeAudioStudioSheet() {
+        _showAudioStudioSheet.value = false
+    }
+
+    fun updateClipSpeed(clipId: String, speed: Float, ramp: SpeedRampPreset) {
+        val proj = activeProject() ?: return
+        val safeSpeed = speed.coerceIn(0.1f, 10.0f)
+        val updatedClips = proj.clips.map { clip ->
+            if (clip.id == clipId && clip.kind == MediaKind.VIDEO) {
+                clip.copy(speed = safeSpeed, speedRamp = ramp)
+            } else clip
+        }
+        mutateProject(
+            newProject = proj.copy(clips = updatedClips),
+            recordHistoryThrottled = true,
+            rebuildPlayer = false
+        )
+        trimSyncJob?.cancel()
+        trimSyncJob = viewModelScope.launch {
+            delay(110L)
+            activeProject()?.let {
+                playerController.setTimelineMedia(it.clips, it.audioClips, playerController.globalPositionMs.value)
+            }
+        }
+    }
+
+    fun freezeFrameAtPlayhead(clipId: String) {
+        val proj = activeProject() ?: return
+        val idx = proj.clips.indexOfFirst { it.id == clipId }.takeIf { it >= 0 } ?: 0
+        val clip = proj.clips.getOrNull(idx) ?: return
+        playerController.pause()
+
+        var accMs = 0L
+        for (i in 0 until idx) accMs += proj.clips[i].activeDurationMs
+        val globalPos = playerController.globalPositionMs.value
+        val localMs = (globalPos - accMs).coerceIn(0L, clip.activeDurationMs)
+        val sourceTimeMs = if (clip.kind == MediaKind.IMAGE) {
+            0L
+        } else {
+            (clip.trimStartMs + (localMs * clip.effectiveSpeed).toLong())
+                .coerceIn(clip.trimStartMs, clip.trimEndMs)
+        }
+
+        viewModelScope.launch {
+            val file = FreezeFrameHelper.captureFrameFile(appContext, clip.uriString, sourceTimeMs)
+            if (file == null) {
+                _bannerMessage.value = "Could not capture freeze frame from this clip."
+                return@launch
+            }
+            val freezeClip = TimelineClip(
+                uriString = Uri.fromFile(file).toString(),
+                displayName = "Freeze ${clip.displayName.take(8)}",
+                kind = MediaKind.IMAGE,
+                sourceDurationMs = 3000L,
+                trimStartMs = 0L,
+                trimEndMs = 3000L
+            )
+            val latest = activeProject() ?: proj
+            val insertAt = (latest.clips.indexOfFirst { it.id == clip.id }.takeIf { it >= 0 } ?: 0) + 1
+            val updatedClips = latest.clips.toMutableList().apply { add(insertAt, freezeClip) }
+            mutateProject(
+                newProject = latest.copy(clips = updatedClips),
+                newSelection = TimelineSelection(TrackType.VIDEO, freezeClip.id),
+                rebuildPlayer = true
+            )
+            _bannerMessage.value = "Freeze frame added (3.0s)."
+        }
+    }
+
+    fun updateClipTransform(
+        clipId: String,
+        scale: Float,
+        panX: Float,
+        panY: Float,
+        rotationDeg: Float,
+        flipH: Boolean,
+        flipV: Boolean,
+        opacity: Float,
+        blendMode: BlendModePreset
+    ) {
+        val proj = activeProject() ?: return
+        val updatedClips = proj.clips.map { clip ->
+            if (clip.id == clipId) {
+                clip.copy(
+                    scale = scale.coerceIn(0.25f, 4.0f),
+                    panX = panX.coerceIn(-0.8f, 0.8f),
+                    panY = panY.coerceIn(-0.8f, 0.8f),
+                    rotationDeg = rotationDeg.coerceIn(-180f, 180f),
+                    flipHorizontal = flipH,
+                    flipVertical = flipV,
+                    opacity = opacity.coerceIn(0f, 1f),
+                    blendMode = blendMode
+                )
+            } else clip
+        }
+        mutateProject(
+            newProject = proj.copy(clips = updatedClips),
+            recordHistoryThrottled = true,
+            rebuildPlayer = false
+        )
+        playerController.refreshClipEffects(updatedClips)
+    }
+
+    fun resetClipTransform(clipId: String) {
+        val proj = activeProject() ?: return
+        val updatedClips = proj.clips.map { clip ->
+            if (clip.id == clipId) {
+                clip.copy(
+                    scale = 1.0f,
+                    panX = 0f,
+                    panY = 0f,
+                    rotationDeg = 0f,
+                    flipHorizontal = false,
+                    flipVertical = false,
+                    opacity = 1.0f,
+                    blendMode = BlendModePreset.NORMAL
+                )
+            } else clip
+        }
+        mutateProject(
+            newProject = proj.copy(clips = updatedClips),
+            rebuildPlayer = false
+        )
+        playerController.refreshClipEffects(updatedClips)
+        _bannerMessage.value = "Transform & Blend reset."
+    }
+
+    fun addOrUpdateKeyframe(trackType: TrackType, itemId: String, node: KeyframeNode) {
+        val proj = activeProject() ?: return
+        fun upsert(list: List<KeyframeNode>): List<KeyframeNode> {
+            val filtered = list.filterNot {
+                it.id == node.id || kotlin.math.abs(it.timeOffsetMs - node.timeOffsetMs) <= 80L
+            }
+            return (filtered + node).sortedBy { it.timeOffsetMs }
+        }
+
+        val updated = when (trackType) {
+            TrackType.VIDEO -> {
+                val nextClips = proj.clips.map { if (it.id == itemId) it.copy(keyframes = upsert(it.keyframes)) else it }
+                playerController.refreshClipEffects(nextClips)
+                proj.copy(clips = nextClips)
+            }
+            TrackType.TEXT -> proj.copy(
+                textLayers = proj.textLayers.map { if (it.id == itemId) it.copy(keyframes = upsert(it.keyframes)) else it }
+            )
+            TrackType.STICKER -> proj.copy(
+                stickerLayers = proj.stickerLayers.map { if (it.id == itemId) it.copy(keyframes = upsert(it.keyframes)) else it }
+            )
+            TrackType.AUDIO -> return
+        }
+        mutateProject(updated, recordHistoryThrottled = true, rebuildPlayer = false)
+    }
+
+    fun deleteKeyframe(trackType: TrackType, itemId: String, keyframeId: String) {
+        val proj = activeProject() ?: return
+        val updated = when (trackType) {
+            TrackType.VIDEO -> {
+                val nextClips = proj.clips.map { clip ->
+                    if (clip.id == itemId) clip.copy(keyframes = clip.keyframes.filterNot { it.id == keyframeId }) else clip
+                }
+                playerController.refreshClipEffects(nextClips)
+                proj.copy(clips = nextClips)
+            }
+            TrackType.TEXT -> proj.copy(
+                textLayers = proj.textLayers.map { layer ->
+                    if (layer.id == itemId) layer.copy(keyframes = layer.keyframes.filterNot { it.id == keyframeId }) else layer
+                }
+            )
+            TrackType.STICKER -> proj.copy(
+                stickerLayers = proj.stickerLayers.map { sticker ->
+                    if (sticker.id == itemId) sticker.copy(keyframes = sticker.keyframes.filterNot { it.id == keyframeId }) else sticker
+                }
+            )
+            TrackType.AUDIO -> return
+        }
+        mutateProject(updated, rebuildPlayer = false)
+    }
+
+    fun updateAudioMix(audioId: String, volume: Float, fadeInMs: Long, fadeOutMs: Long) {
+        val proj = activeProject() ?: return
+        val updatedAudio = proj.audioClips.map { audio ->
+            if (audio.id == audioId) {
+                audio.copy(
+                    volume = volume.coerceIn(0f, 2f),
+                    fadeInMs = fadeInMs.coerceIn(0L, 5000L),
+                    fadeOutMs = fadeOutMs.coerceIn(0L, 5000L)
+                )
+            } else audio
+        }
+        mutateProject(
+            newProject = proj.copy(audioClips = updatedAudio),
+            recordHistoryThrottled = true,
+            rebuildPlayer = false
+        )
+        playerController.refreshAudioClips(updatedAudio)
+    }
+
+    fun reanalyzeAudioBeats(audioId: String) {
+        val proj = activeProject() ?: return
+        val audio = proj.audioClips.firstOrNull { it.id == audioId } ?: return
+        analyzeAudioInBackground(proj.id, audio.id, audio.uriString, audio.sourceDurationMs)
+        _bannerMessage.value = "Analyzing PCM waveform & beats..."
+    }
+
+    private fun analyzeAudioInBackground(projectId: String, audioId: String, uriString: String, durationMs: Long) {
+        viewModelScope.launch {
+            val result = AudioWaveformExtractor.analyze(appContext, uriString, durationMs)
+            val currentList = _projects.value
+            val targetProj = currentList.firstOrNull { it.id == projectId } ?: return@launch
+            if (targetProj.audioClips.none { it.id == audioId }) return@launch
+            val updatedProj = targetProj.copy(
+                audioClips = targetProj.audioClips.map { a ->
+                    if (a.id == audioId) {
+                        a.copy(waveformPeaks = result.waveformPeaks, beatMarkersMs = result.beatMarkersMs)
+                    } else a
+                }
+            )
+            _projects.value = currentList.map { if (it.id == updatedProj.id) updatedProj else it }
+            repository.saveProject(updatedProj)
+        }
+    }
+
+    fun startVoiceoverRecording() {
+        if (_isRecordingVoiceover.value) return
+        playerController.pause()
+        val ok = voiceoverRecorder.startRecording()
+        if (!ok) {
+            _bannerMessage.value = "Could not initialize microphone recorder."
+            return
+        }
+        _isRecordingVoiceover.value = true
+        _voiceoverElapsedMs.value = 0L
+        _voiceoverAmplitude.value = 0f
+        voiceoverPollJob?.cancel()
+        voiceoverPollJob = viewModelScope.launch {
+            while (isActive && _isRecordingVoiceover.value) {
+                _voiceoverAmplitude.value = voiceoverRecorder.currentAmplitudeNormalized()
+                _voiceoverElapsedMs.value = voiceoverRecorder.elapsedMs()
+                delay(60L)
+            }
+        }
+    }
+
+    fun stopVoiceoverRecording() {
+        if (!_isRecordingVoiceover.value) return
+        _isRecordingVoiceover.value = false
+        voiceoverPollJob?.cancel()
+        voiceoverPollJob = null
+        val finalized = voiceoverRecorder.stopAndFinalize()
+        _voiceoverAmplitude.value = 0f
+        _voiceoverElapsedMs.value = 0L
+
+        if (finalized == null) {
+            _bannerMessage.value = "Voiceover too short or empty."
+            return
+        }
+        val (file, durMs) = finalized
+        val proj = activeProject() ?: return
+        val startMs = playerController.globalPositionMs.value
+        val uriString = Uri.fromFile(file).toString()
+
+        viewModelScope.launch {
+            val analysis = AudioWaveformExtractor.analyze(appContext, uriString, durMs)
+            val voClip = AudioClip(
+                uriString = uriString,
+                displayName = "Voiceover ${proj.audioClips.size + 1}",
+                startTimeMs = startMs,
+                sourceDurationMs = durMs,
+                trimStartMs = 0L,
+                trimEndMs = durMs,
+                volume = 1.0f,
+                waveformPeaks = analysis.waveformPeaks,
+                beatMarkersMs = analysis.beatMarkersMs
+            )
+            val latest = activeProject() ?: proj
+            mutateProject(
+                newProject = latest.copy(audioClips = latest.audioClips + voClip),
+                newSelection = TimelineSelection(TrackType.AUDIO, voClip.id),
+                rebuildPlayer = true
+            )
+            _bannerMessage.value = "Voiceover added (${MediaPickerHelper.formatDuration(durMs)})."
+        }
+    }
+
+    private fun cancelVoiceoverIfRecording() {
+        _isRecordingVoiceover.value = false
+        voiceoverPollJob?.cancel()
+        voiceoverPollJob = null
+        voiceoverRecorder.cancel()
+        _voiceoverAmplitude.value = 0f
+        _voiceoverElapsedMs.value = 0L
+    }
+
     fun setExportSheetVisible(visible: Boolean) {
         if (visible) {
             playerController.pause()
@@ -1089,6 +1460,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     override fun onCleared() {
         super.onCleared()
         trimSyncJob?.cancel()
+        cancelVoiceoverIfRecording()
         exporter.cancel()
         playerController.release()
     }

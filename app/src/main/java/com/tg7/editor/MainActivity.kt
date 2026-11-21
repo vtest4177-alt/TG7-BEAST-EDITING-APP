@@ -2,6 +2,7 @@ package com.tg7.editor
 
 import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -21,16 +22,21 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.tg7.editor.crash.CrashErrorScreen
 import com.tg7.editor.crash.CrashHandler
+import com.tg7.editor.model.TrackType
 import com.tg7.editor.ui.components.AddStickerSheet
 import com.tg7.editor.ui.components.AddTextSheet
+import com.tg7.editor.ui.components.AudioStudioSheet
 import com.tg7.editor.ui.components.EffectsAndColorSheet
 import com.tg7.editor.ui.components.ExportSheet
+import com.tg7.editor.ui.components.KeyframeInspectorSheet
 import com.tg7.editor.ui.components.RecentMediaSheet
+import com.tg7.editor.ui.components.SpeedAndTransformSheet
 import com.tg7.editor.ui.components.TransitionPickerSheet
 import com.tg7.editor.ui.editor.EditorScreen
 import com.tg7.editor.ui.editor.EditorViewModel
@@ -97,6 +103,14 @@ class MainActivity : ComponentActivity() {
                 val transitionCutIndex by viewModel.transitionCutIndex.collectAsState()
                 val showEffectsSheet by viewModel.showEffectsSheet.collectAsState()
                 val effectsInitialTab by viewModel.effectsInitialTab.collectAsState()
+                val showSpeedTransformSheet by viewModel.showSpeedTransformSheet.collectAsState()
+                val speedTransformInitialTab by viewModel.speedTransformInitialTab.collectAsState()
+                val showKeyframeSheet by viewModel.showKeyframeSheet.collectAsState()
+                val showAudioStudioSheet by viewModel.showAudioStudioSheet.collectAsState()
+                val audioStudioInitialTab by viewModel.audioStudioInitialTab.collectAsState()
+                val isRecordingVoiceover by viewModel.isRecordingVoiceover.collectAsState()
+                val voiceoverAmplitude by viewModel.voiceoverAmplitude.collectAsState()
+                val voiceoverElapsedMs by viewModel.voiceoverElapsedMs.collectAsState()
                 val showTrimPanel by viewModel.showTrimPanel.collectAsState()
                 val isFullscreenPreview by viewModel.isFullscreenPreview.collectAsState()
                 val isImporting by viewModel.isImporting.collectAsState()
@@ -145,6 +159,27 @@ class MainActivity : ComponentActivity() {
                     contract = ActivityResultContracts.RequestMultiplePermissions()
                 ) {
                     viewModel.refreshRecentMedia()
+                }
+
+                val recordAudioPermissionLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.RequestPermission()
+                ) { granted ->
+                    if (granted) {
+                        viewModel.openAudioStudioSheet(1)
+                        viewModel.startVoiceoverRecording()
+                    }
+                }
+
+                val launchVoiceoverWithPermission = {
+                    val granted = ContextCompat.checkSelfPermission(
+                        this@MainActivity,
+                        Manifest.permission.RECORD_AUDIO
+                    ) == PackageManager.PERMISSION_GRANTED
+                    if (granted) {
+                        viewModel.startVoiceoverRecording()
+                    } else {
+                        recordAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                    }
                 }
 
                 val requestRecentPermissions = {
@@ -236,6 +271,11 @@ class MainActivity : ComponentActivity() {
                         onOpenTransitionsDock = { viewModel.openTransitionPicker(null) },
                         onOpenEffectsDock = { viewModel.openEffectsSheet(0) },
                         onOpenChromaDock = { viewModel.openEffectsSheet(2) },
+                        onOpenSpeedDock = { viewModel.openSpeedTransformSheet(0) },
+                        onOpenTransformDock = { viewModel.openSpeedTransformSheet(1) },
+                        onOpenKeyframesDock = { viewModel.openKeyframeSheet() },
+                        onOpenAudioStudioDock = { viewModel.openAudioStudioSheet(0) },
+                        onOpenVoiceoverDock = { viewModel.openAudioStudioSheet(1) },
                         onToggleFullscreen = viewModel::toggleFullscreenPreview,
                         onDismissError = {
                             viewModel.playerController.clearError()
@@ -311,6 +351,56 @@ class MainActivity : ComponentActivity() {
                                 onDismiss = viewModel::closeEffectsSheet
                             )
                         }
+                    }
+
+                    if (showSpeedTransformSheet) {
+                        val targetClip = activeProject.clips.firstOrNull { it.id == selection?.itemId }
+                            ?: activeProject.clips.firstOrNull()
+                        if (targetClip != null) {
+                            SpeedAndTransformSheet(
+                                clip = targetClip,
+                                initialTab = speedTransformInitialTab,
+                                onUpdateSpeed = viewModel::updateClipSpeed,
+                                onFreezeFrame = viewModel::freezeFrameAtPlayhead,
+                                onUpdateTransform = viewModel::updateClipTransform,
+                                onResetTransform = viewModel::resetClipTransform,
+                                onDismiss = viewModel::closeSpeedTransformSheet
+                            )
+                        }
+                    }
+
+                    if (showKeyframeSheet) {
+                        KeyframeInspectorSheet(
+                            project = activeProject,
+                            selection = selection,
+                            globalPositionMs = globalPositionMs,
+                            onSeekGlobal = viewModel.playerController::seekToGlobal,
+                            onAddOrUpdateKeyframe = viewModel::addOrUpdateKeyframe,
+                            onDeleteKeyframe = viewModel::deleteKeyframe,
+                            onDismiss = viewModel::closeKeyframeSheet
+                        )
+                    }
+
+                    if (showAudioStudioSheet) {
+                        val selectedAudioId = if (selection?.trackType == TrackType.AUDIO) {
+                            selection?.itemId
+                        } else null
+                        AudioStudioSheet(
+                            audioClips = activeProject.audioClips,
+                            selectedAudioId = selectedAudioId,
+                            initialTab = audioStudioInitialTab,
+                            isRecordingVoiceover = isRecordingVoiceover,
+                            voiceoverAmplitude = voiceoverAmplitude,
+                            voiceoverElapsedMs = voiceoverElapsedMs,
+                            onSelectAudioClip = { audioId -> viewModel.selectTimelineItem(TrackType.AUDIO, audioId) },
+                            onImportAudioClick = { audioPicker.launch(arrayOf("audio/*")) },
+                            onUpdateAudioMix = viewModel::updateAudioMix,
+                            onReanalyzeBeats = viewModel::reanalyzeAudioBeats,
+                            onSeekToBeatGlobal = viewModel.playerController::seekToGlobal,
+                            onStartVoiceoverClick = launchVoiceoverWithPermission,
+                            onStopVoiceoverClick = viewModel::stopVoiceoverRecording,
+                            onDismiss = viewModel::closeAudioStudioSheet
+                        )
                     }
 
                     if (showExportSheet) {

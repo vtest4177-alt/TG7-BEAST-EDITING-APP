@@ -20,14 +20,19 @@ import androidx.annotation.OptIn
 import androidx.core.content.FileProvider
 import com.airbnb.lottie.LottieCompositionFactory
 import com.airbnb.lottie.LottieDrawable
+import androidx.media3.common.C
 import androidx.media3.common.Effect
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.audio.AudioProcessor
+import androidx.media3.common.audio.SpeedChangingAudioProcessor
+import androidx.media3.common.audio.SpeedProvider
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.BitmapOverlay
 import androidx.media3.effect.OverlayEffect
 import androidx.media3.effect.OverlaySettings
 import androidx.media3.effect.Presentation
+import androidx.media3.effect.SpeedChangeEffect
 import androidx.media3.effect.TextureOverlay
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.EditedMediaItem
@@ -39,6 +44,7 @@ import androidx.media3.transformer.ProgressHolder
 import androidx.media3.transformer.Transformer
 import com.google.common.collect.ImmutableList
 import com.tg7.editor.engine.anim.OverlayAnimator
+import com.tg7.editor.engine.audio.VolumeFadeAudioProcessor
 import com.tg7.editor.engine.gl.ClipVideoEffectsEffect
 import com.tg7.editor.engine.gl.TransitionTimelineEffect
 import com.tg7.editor.model.EditorProject
@@ -82,14 +88,11 @@ class HardwareVideoExporter(context: Context) {
         mainHandler.post {
             try {
                 val (targetW, targetH) = project.aspectRatio.outputDimensions(resolution.shortEdgePx)
-                val videoEffects: List<Effect> = listOf(
-                    Presentation.createForWidthAndHeight(
-                        targetW,
-                        targetH,
-                        Presentation.LAYOUT_SCALE_TO_FIT
-                    )
+                val basePresentation = Presentation.createForWidthAndHeight(
+                    targetW,
+                    targetH,
+                    Presentation.LAYOUT_SCALE_TO_FIT
                 )
-                val itemEffects = Effects(emptyList(), videoEffects)
 
                 val editedVideoItems = project.clips.map { clip ->
                     val itemBuilder = MediaItem.Builder()
@@ -106,8 +109,26 @@ class HardwareVideoExporter(context: Context) {
                         itemBuilder.setImageDurationMs(clip.activeDurationMs)
                     }
 
+                    val clipSpeed = clip.effectiveSpeed
+                    val hasSpeedChange = clip.kind == MediaKind.VIDEO && kotlin.math.abs(clipSpeed - 1.0f) > 0.02f
+                    val clipVideoEffects = buildList<Effect> {
+                        add(basePresentation)
+                        if (hasSpeedChange) {
+                            add(SpeedChangeEffect(clipSpeed))
+                        }
+                    }
+                    val clipAudioProcessors = buildList<AudioProcessor> {
+                        if (hasSpeedChange) {
+                            val provider = object : SpeedProvider {
+                                override fun getSpeed(timeUs: Long): Float = clipSpeed
+                                override fun getNextSpeedChangeTimeUs(timeUs: Long): Long = C.TIME_UNSET
+                            }
+                            add(SpeedChangingAudioProcessor(provider))
+                        }
+                    }
+
                     val editedBuilder = EditedMediaItem.Builder(itemBuilder.build())
-                        .setEffects(itemEffects)
+                        .setEffects(Effects(clipAudioProcessors, clipVideoEffects))
 
                     if (clip.kind == MediaKind.IMAGE) {
                         editedBuilder
@@ -130,8 +151,15 @@ class HardwareVideoExporter(context: Context) {
                                     .build()
                             )
                             .build()
+                        val audioProc = VolumeFadeAudioProcessor(
+                            volumeGain = audio.volume,
+                            fadeInMs = audio.fadeInMs,
+                            fadeOutMs = audio.fadeOutMs,
+                            activeDurationMs = audio.activeDurationMs
+                        )
                         EditedMediaItem.Builder(audioItem)
                             .setRemoveVideo(true)
+                            .setEffects(Effects(listOf(audioProc), emptyList()))
                             .build()
                     }
                     sequences.add(EditedMediaItemSequence(editedAudioItems))
@@ -306,16 +334,14 @@ class HardwareVideoExporter(context: Context) {
 
         val startUs = layer.startTimeMs * 1000L
         val endUs = (layer.startTimeMs + layer.durationMs) * 1000L
-        val ndcX = (layer.posXFraction * 2f - 1f).coerceIn(-0.92f, 0.92f)
-        val ndcY = (1f - layer.posYFraction * 2f).coerceIn(-0.92f, 0.92f)
         val hiddenSettings = OverlaySettings.Builder().setAlphaScale(0f).build()
-        val isStatic = layer.animationId == "ta_none"
+        val hasMotion = layer.animationId != "ta_none" || layer.keyframes.isNotEmpty()
 
         return object : BitmapOverlay() {
             private var useB = false
 
             override fun getBitmap(presentationTimeUs: Long): Bitmap {
-                if (isStatic || presentationTimeUs !in startUs..endUs) return bmpA
+                if (!hasMotion || presentationTimeUs !in startUs..endUs) return bmpA
                 val localMs = (presentationTimeUs - startUs) / 1000L
                 val frame = OverlayAnimator.evaluateText(appContext, layer, localMs)
                 useB = !useB
@@ -333,11 +359,13 @@ class HardwareVideoExporter(context: Context) {
                 if (presentationTimeUs !in startUs..endUs) return hiddenSettings
                 val localMs = (presentationTimeUs - startUs) / 1000L
                 val frame = OverlayAnimator.evaluateText(appContext, layer, localMs)
+                val ndcX = (frame.posXFraction * 2f - 1f).coerceIn(-0.92f, 0.92f)
+                val ndcY = (1f - frame.posYFraction * 2f).coerceIn(-0.92f, 0.92f)
                 val shiftX = (frame.offsetXDp / 360f)
                 val shiftY = (frame.offsetYDp / 360f)
                 return OverlaySettings.Builder()
                     .setAlphaScale(frame.alpha.coerceIn(0f, 1f))
-                    .setScale(frame.scaleX.coerceIn(0.1f, 3f), frame.scaleY.coerceIn(0.1f, 3f))
+                    .setScale(frame.scaleX.coerceIn(0.1f, 3.5f), frame.scaleY.coerceIn(0.1f, 3.5f))
                     .setRotationDegrees(frame.rotationDeg)
                     .setBackgroundFrameAnchor(
                         (ndcX + shiftX).coerceIn(-0.96f, 0.96f),
@@ -359,15 +387,23 @@ class HardwareVideoExporter(context: Context) {
 
         val startUs = sticker.startTimeMs * 1000L
         val endUs = (sticker.startTimeMs + sticker.durationMs) * 1000L
-        val ndcX = (sticker.posXFraction * 2f - 1f).coerceIn(-0.92f, 0.92f)
-        val ndcY = (1f - sticker.posYFraction * 2f).coerceIn(-0.92f, 0.92f)
-        val visibleSettings = OverlaySettings.Builder()
-            .setAlphaScale(1f)
-            .setBackgroundFrameAnchor(ndcX, ndcY)
-            .build()
         val hiddenSettings = OverlaySettings.Builder()
             .setAlphaScale(0f)
             .build()
+
+        fun buildStickerSettings(presentationTimeUs: Long): OverlaySettings {
+            if (presentationTimeUs !in startUs..endUs) return hiddenSettings
+            val localMs = ((presentationTimeUs - startUs) / 1000L).coerceAtLeast(0L)
+            val kf = OverlayAnimator.evaluateSticker(sticker, localMs)
+            val ndcX = (kf.posX * 2f - 1f).coerceIn(-0.94f, 0.94f)
+            val ndcY = (1f - kf.posY * 2f).coerceIn(-0.94f, 0.94f)
+            return OverlaySettings.Builder()
+                .setAlphaScale(kf.opacity.coerceIn(0f, 1f))
+                .setScale(kf.scale.coerceIn(0.1f, 3.5f), kf.scale.coerceIn(0.1f, 3.5f))
+                .setRotationDegrees(kf.rotationDeg)
+                .setBackgroundFrameAnchor(ndcX, ndcY)
+                .build()
+        }
 
         if (lottieComp != null) {
             val bmpB = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
@@ -382,7 +418,7 @@ class HardwareVideoExporter(context: Context) {
                 private var useB = false
 
                 override fun getBitmap(presentationTimeUs: Long): Bitmap {
-                    val localMs = (presentationTimeUs - startUs).coerceAtLeast(0L)
+                    val localMs = (presentationTimeUs - startUs).coerceAtLeast(0L) / 1000L
                     drawable.progress = (localMs % 1500L) / 1500f
                     useB = !useB
                     val targetBmp = if (useB) bmpB else bmpA
@@ -393,7 +429,7 @@ class HardwareVideoExporter(context: Context) {
                 }
 
                 override fun getOverlaySettings(presentationTimeUs: Long): OverlaySettings {
-                    return if (presentationTimeUs in startUs..endUs) visibleSettings else hiddenSettings
+                    return buildStickerSettings(presentationTimeUs)
                 }
             }
         }
@@ -424,7 +460,7 @@ class HardwareVideoExporter(context: Context) {
         return object : BitmapOverlay() {
             override fun getBitmap(presentationTimeUs: Long): Bitmap = bmpA
             override fun getOverlaySettings(presentationTimeUs: Long): OverlaySettings {
-                return if (presentationTimeUs in startUs..endUs) visibleSettings else hiddenSettings
+                return buildStickerSettings(presentationTimeUs)
             }
         }
     }

@@ -159,6 +159,82 @@ data class ChromaKeyConfig(
     val smoothness: Float = 0.12f
 )
 
+enum class SpeedRampPreset(val label: String, val points: FloatArray) {
+    NONE("Constant", floatArrayOf(1f, 1f, 1f)),
+    HERO_DIP("Hero Dip", floatArrayOf(2.2f, 0.35f, 2.2f)),
+    MONTAGE("Montage", floatArrayOf(0.55f, 2.4f, 0.65f)),
+    BULLET("Bullet Time", floatArrayOf(2.8f, 0.25f, 1.5f)),
+    FLASH_IN("Flash In", floatArrayOf(3.0f, 1.0f, 0.85f)),
+    PULSE("Beat Pulse", floatArrayOf(1.0f, 2.8f, 1.0f));
+
+    fun evaluateAt(progress: Float, baseMultiplier: Float = 1.0f): Float {
+        if (this == NONE) return baseMultiplier.coerceIn(0.1f, 10.0f)
+        val p = progress.coerceIn(0f, 1f)
+        val raw = if (p <= 0.5f) {
+            val t = p / 0.5f
+            points[0] + (points[1] - points[0]) * t
+        } else {
+            val t = (p - 0.5f) / 0.5f
+            points[1] + (points[2] - points[1]) * t
+        }
+        return (raw * baseMultiplier).coerceIn(0.1f, 10.0f)
+    }
+
+    fun averageSpeed(baseMultiplier: Float = 1.0f): Float {
+        if (this == NONE) return baseMultiplier.coerceIn(0.1f, 10.0f)
+        val avg = (points[0] + 2f * points[1] + points[2]) / 4f
+        return (avg * baseMultiplier).coerceIn(0.1f, 10.0f)
+    }
+}
+
+enum class BlendModePreset(val label: String, val shaderIndex: Int) {
+    NORMAL("Normal", 0),
+    SCREEN("Screen", 1),
+    ADD("Linear Add", 2),
+    MULTIPLY("Multiply", 3),
+    OVERLAY("Overlay", 4)
+}
+
+enum class EasingCurve(val label: String) {
+    LINEAR("Linear"),
+    EASE_IN("Ease In"),
+    EASE_OUT("Ease Out"),
+    EASE_IN_OUT("Ease In-Out"),
+    SPRING("Spring");
+
+    fun evaluate(t: Float): Float {
+        val x = t.coerceIn(0f, 1f)
+        return when (this) {
+            LINEAR -> x
+            EASE_IN -> x * x * x
+            EASE_OUT -> 1f - (1f - x) * (1f - x) * (1f - x)
+            EASE_IN_OUT -> if (x < 0.5f) 4f * x * x * x else 1f - ((-2f * x + 2f) * (-2f * x + 2f) * (-2f * x + 2f)) / 2f
+            SPRING -> {
+                if (x >= 1f) 1f else {
+                    1f - kotlin.math.exp(-6.5f * x) * kotlin.math.cos(x * 11f)
+                }
+            }
+        }
+    }
+
+    companion object {
+        fun fromWire(value: String): EasingCurve {
+            return entries.firstOrNull { it.name == value } ?: EASE_IN_OUT
+        }
+    }
+}
+
+data class KeyframeNode(
+    val id: String = UUID.randomUUID().toString(),
+    val timeOffsetMs: Long,
+    val posX: Float = 0.5f,
+    val posY: Float = 0.5f,
+    val scale: Float = 1.0f,
+    val rotationDeg: Float = 0f,
+    val opacity: Float = 1.0f,
+    val easing: EasingCurve = EasingCurve.EASE_IN_OUT
+)
+
 data class TimelineClip(
     val id: String = UUID.randomUUID().toString(),
     val uriString: String,
@@ -179,16 +255,48 @@ data class TimelineClip(
     val chromaEnabled: Boolean = false,
     val chromaColorHex: Long = 0xFF00C853L,
     val chromaSimilarity: Float = 0.35f,
-    val chromaSmoothness: Float = 0.12f
+    val chromaSmoothness: Float = 0.12f,
+    val speed: Float = 1.0f,
+    val speedRamp: SpeedRampPreset = SpeedRampPreset.NONE,
+    val scale: Float = 1.0f,
+    val panX: Float = 0f,
+    val panY: Float = 0f,
+    val rotationDeg: Float = 0f,
+    val flipHorizontal: Boolean = false,
+    val flipVertical: Boolean = false,
+    val opacity: Float = 1.0f,
+    val blendMode: BlendModePreset = BlendModePreset.NORMAL,
+    val keyframes: List<KeyframeNode> = emptyList()
 ) {
+    val effectiveSpeed: Float
+        get() = if (kind == MediaKind.IMAGE) 1.0f else speedRamp.averageSpeed(speed)
+
     val activeDurationMs: Long
-        get() = (trimEndMs - trimStartMs).coerceAtLeast(300L)
+        get() {
+            val baseSpan = (trimEndMs - trimStartMs).coerceAtLeast(300L)
+            return if (kind == MediaKind.IMAGE) {
+                baseSpan
+            } else {
+                (baseSpan / effectiveSpeed).toLong().coerceAtLeast(300L)
+            }
+        }
 
     val hasCustomGrading: Boolean
         get() = !colorGrade().isNeutral
 
+    val hasCustomTransform: Boolean
+        get() = kotlin.math.abs(scale - 1.0f) > 0.005f ||
+            kotlin.math.abs(panX) > 0.005f ||
+            kotlin.math.abs(panY) > 0.005f ||
+            kotlin.math.abs(rotationDeg) > 0.1f ||
+            flipHorizontal ||
+            flipVertical ||
+            opacity < 0.995f ||
+            blendMode != BlendModePreset.NORMAL ||
+            keyframes.isNotEmpty()
+
     val hasActiveVisualProcessing: Boolean
-        get() = !effectId.isNullOrBlank() || hasCustomGrading || chromaEnabled
+        get() = !effectId.isNullOrBlank() || hasCustomGrading || chromaEnabled || hasCustomTransform
 
     fun colorGrade(): ClipColorGrade = ClipColorGrade(
         brightness = brightness,
@@ -214,7 +322,11 @@ data class AudioClip(
     val sourceDurationMs: Long = 10_000L,
     val trimStartMs: Long = 0L,
     val trimEndMs: Long = sourceDurationMs,
-    val volume: Float = 1.0f
+    val volume: Float = 1.0f,
+    val fadeInMs: Long = 0L,
+    val fadeOutMs: Long = 0L,
+    val waveformPeaks: List<Float> = emptyList(),
+    val beatMarkersMs: List<Long> = emptyList()
 ) {
     val activeDurationMs: Long
         get() = (trimEndMs - trimStartMs).coerceAtLeast(300L)
@@ -275,7 +387,11 @@ data class TextLayer(
     val fontFamily: TextFontFamily = TextFontFamily.DISPLAY,
     val bgColorHex: Long = 0x00000000L,
     val hasOutline: Boolean = true,
-    val letterSpacingEm: Float = 0.04f
+    val letterSpacingEm: Float = 0.04f,
+    val scale: Float = 1.0f,
+    val rotationDeg: Float = 0f,
+    val opacity: Float = 1.0f,
+    val keyframes: List<KeyframeNode> = emptyList()
 )
 
 data class StickerLayer(
@@ -288,7 +404,11 @@ data class StickerLayer(
     val sizeDp: Float = 68f,
     val tintHex: Long = preset.defaultTintHex,
     val lottieAssetPath: String? = null,
-    val label: String = preset.label
+    val label: String = preset.label,
+    val scale: Float = 1.0f,
+    val rotationDeg: Float = 0f,
+    val opacity: Float = 1.0f,
+    val keyframes: List<KeyframeNode> = emptyList()
 )
 
 data class TimelineSelection(

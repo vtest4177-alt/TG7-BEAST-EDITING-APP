@@ -19,6 +19,8 @@ data class AnimatedTextFrame(
     val offsetXDp: Float = 0f,
     val offsetYDp: Float = 0f,
     val rotationDeg: Float = 0f,
+    val posXFraction: Float = 0.5f,
+    val posYFraction: Float = 0.5f,
     val overrideColorHex: Long? = null
 )
 
@@ -32,7 +34,39 @@ object OverlayAnimator {
         localTimeMs: Long
     ): AnimatedTextFrame {
         val spec = TextAndStickerLoader.findAnimationById(context, layer.animationId)
-        return evaluateTextSpec(layer.text, layer.durationMs, spec, localTimeMs)
+        val base = evaluateTextSpec(layer.text, layer.durationMs, spec, localTimeMs)
+        val kf = KeyframeEngine.evaluate(
+            keyframes = layer.keyframes,
+            basePosX = layer.posXFraction,
+            basePosY = layer.posYFraction,
+            baseScale = layer.scale,
+            baseRotationDeg = layer.rotationDeg,
+            baseOpacity = layer.opacity,
+            localTimeMs = localTimeMs
+        )
+        return base.copy(
+            alpha = (base.alpha * kf.opacity).coerceIn(0f, 1f),
+            scaleX = (base.scaleX * kf.scale).coerceIn(0.1f, 4f),
+            scaleY = (base.scaleY * kf.scale).coerceIn(0.1f, 4f),
+            rotationDeg = base.rotationDeg + kf.rotationDeg,
+            posXFraction = kf.posX.coerceIn(0.05f, 0.95f),
+            posYFraction = kf.posY.coerceIn(0.05f, 0.95f)
+        )
+    }
+
+    fun evaluateSticker(
+        layer: com.tg7.editor.model.StickerLayer,
+        localTimeMs: Long
+    ): ResolvedKeyframeState {
+        return KeyframeEngine.evaluate(
+            keyframes = layer.keyframes,
+            basePosX = layer.posXFraction,
+            basePosY = layer.posYFraction,
+            baseScale = layer.scale,
+            baseRotationDeg = layer.rotationDeg,
+            baseOpacity = layer.opacity,
+            localTimeMs = localTimeMs
+        )
     }
 
     fun evaluateTextSpec(

@@ -61,7 +61,18 @@ data class VideoClipEntity(
     val chromaEnabled: Boolean = false,
     val chromaColorHex: Long = 0xFF00C853L,
     val chromaSimilarity: Float = 0.35f,
-    val chromaSmoothness: Float = 0.12f
+    val chromaSmoothness: Float = 0.12f,
+    val speed: Float = 1.0f,
+    val speedRamp: String = "NONE",
+    val scale: Float = 1.0f,
+    val panX: Float = 0f,
+    val panY: Float = 0f,
+    val rotationDeg: Float = 0f,
+    val flipHorizontal: Boolean = false,
+    val flipVertical: Boolean = false,
+    val opacity: Float = 1.0f,
+    val blendMode: String = "NORMAL",
+    val keyframesJson: String = "[]"
 )
 
 @Entity(
@@ -85,7 +96,11 @@ data class AudioClipEntity(
     val sourceDurationMs: Long,
     val trimStartMs: Long,
     val trimEndMs: Long,
-    val volume: Float
+    val volume: Float,
+    val fadeInMs: Long = 0L,
+    val fadeOutMs: Long = 0L,
+    val waveformJson: String = "[]",
+    val beatsJson: String = "[]"
 )
 
 @Entity(
@@ -115,7 +130,11 @@ data class TextLayerEntity(
     val fontFamily: String = "DISPLAY",
     val bgColorHex: Long = 0L,
     val hasOutline: Boolean = true,
-    val letterSpacingEm: Float = 0.04f
+    val letterSpacingEm: Float = 0.04f,
+    val scale: Float = 1.0f,
+    val rotationDeg: Float = 0f,
+    val opacity: Float = 1.0f,
+    val keyframesJson: String = "[]"
 )
 
 @Entity(
@@ -141,7 +160,11 @@ data class StickerLayerEntity(
     val sizeDp: Float,
     val tintHex: Long,
     val lottieAssetPath: String? = null,
-    val label: String = "Sticker"
+    val label: String = "Sticker",
+    val scale: Float = 1.0f,
+    val rotationDeg: Float = 0f,
+    val opacity: Float = 1.0f,
+    val keyframesJson: String = "[]"
 )
 
 data class ProjectWithLayers(
@@ -230,7 +253,7 @@ interface ProjectDao {
         TextLayerEntity::class,
         StickerLayerEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -276,6 +299,37 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE video_clips ADD COLUMN speed REAL NOT NULL DEFAULT 1.0")
+                db.execSQL("ALTER TABLE video_clips ADD COLUMN speedRamp TEXT NOT NULL DEFAULT 'NONE'")
+                db.execSQL("ALTER TABLE video_clips ADD COLUMN scale REAL NOT NULL DEFAULT 1.0")
+                db.execSQL("ALTER TABLE video_clips ADD COLUMN panX REAL NOT NULL DEFAULT 0.0")
+                db.execSQL("ALTER TABLE video_clips ADD COLUMN panY REAL NOT NULL DEFAULT 0.0")
+                db.execSQL("ALTER TABLE video_clips ADD COLUMN rotationDeg REAL NOT NULL DEFAULT 0.0")
+                db.execSQL("ALTER TABLE video_clips ADD COLUMN flipHorizontal INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE video_clips ADD COLUMN flipVertical INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE video_clips ADD COLUMN opacity REAL NOT NULL DEFAULT 1.0")
+                db.execSQL("ALTER TABLE video_clips ADD COLUMN blendMode TEXT NOT NULL DEFAULT 'NORMAL'")
+                db.execSQL("ALTER TABLE video_clips ADD COLUMN keyframesJson TEXT NOT NULL DEFAULT '[]'")
+
+                db.execSQL("ALTER TABLE audio_clips ADD COLUMN fadeInMs INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE audio_clips ADD COLUMN fadeOutMs INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE audio_clips ADD COLUMN waveformJson TEXT NOT NULL DEFAULT '[]'")
+                db.execSQL("ALTER TABLE audio_clips ADD COLUMN beatsJson TEXT NOT NULL DEFAULT '[]'")
+
+                db.execSQL("ALTER TABLE text_layers ADD COLUMN scale REAL NOT NULL DEFAULT 1.0")
+                db.execSQL("ALTER TABLE text_layers ADD COLUMN rotationDeg REAL NOT NULL DEFAULT 0.0")
+                db.execSQL("ALTER TABLE text_layers ADD COLUMN opacity REAL NOT NULL DEFAULT 1.0")
+                db.execSQL("ALTER TABLE text_layers ADD COLUMN keyframesJson TEXT NOT NULL DEFAULT '[]'")
+
+                db.execSQL("ALTER TABLE sticker_layers ADD COLUMN scale REAL NOT NULL DEFAULT 1.0")
+                db.execSQL("ALTER TABLE sticker_layers ADD COLUMN rotationDeg REAL NOT NULL DEFAULT 0.0")
+                db.execSQL("ALTER TABLE sticker_layers ADD COLUMN opacity REAL NOT NULL DEFAULT 1.0")
+                db.execSQL("ALTER TABLE sticker_layers ADD COLUMN keyframesJson TEXT NOT NULL DEFAULT '[]'")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -283,7 +337,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "tg7_editor_studio.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .fallbackToDestructiveMigration()
                     .build()
                     .also { INSTANCE = it }

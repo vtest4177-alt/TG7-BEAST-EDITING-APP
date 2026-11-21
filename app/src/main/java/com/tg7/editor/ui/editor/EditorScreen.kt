@@ -46,16 +46,21 @@ import androidx.compose.material.icons.rounded.CheckBox
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.ContentCut
+import androidx.compose.material.icons.rounded.CropRotate
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.DeleteSweep
+import androidx.compose.material.icons.rounded.Diamond
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.EmojiEmotions
 import androidx.compose.material.icons.rounded.FilterCenterFocus
 import androidx.compose.material.icons.rounded.Fullscreen
 import androidx.compose.material.icons.rounded.FullscreenExit
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.Button
@@ -159,6 +164,11 @@ fun EditorScreen(
     onOpenTransitionsDock: () -> Unit,
     onOpenEffectsDock: () -> Unit,
     onOpenChromaDock: () -> Unit,
+    onOpenSpeedDock: () -> Unit,
+    onOpenTransformDock: () -> Unit,
+    onOpenKeyframesDock: () -> Unit,
+    onOpenAudioStudioDock: () -> Unit,
+    onOpenVoiceoverDock: () -> Unit,
     onToggleFullscreen: () -> Unit,
     onDismissError: () -> Unit
 ) {
@@ -448,6 +458,11 @@ fun EditorScreen(
                         onTransitions = onOpenTransitionsDock,
                         onEffects = onOpenEffectsDock,
                         onChroma = onOpenChromaDock,
+                        onSpeed = onOpenSpeedDock,
+                        onTransform = onOpenTransformDock,
+                        onKeyframes = onOpenKeyframesDock,
+                        onAudioStudio = onOpenAudioStudioDock,
+                        onVoiceover = onOpenVoiceoverDock,
                         onTrimToggle = onToggleTrimPanel,
                         onSplit = onSplitAtPlayhead,
                         onDuplicate = onDuplicateSelected,
@@ -531,6 +546,11 @@ fun EditorScreen(
                 onTransitions = onOpenTransitionsDock,
                 onEffects = onOpenEffectsDock,
                 onChroma = onOpenChromaDock,
+                onSpeed = onOpenSpeedDock,
+                onTransform = onOpenTransformDock,
+                onKeyframes = onOpenKeyframesDock,
+                onAudioStudio = onOpenAudioStudioDock,
+                onVoiceover = onOpenVoiceoverDock,
                 onTrimToggle = onToggleTrimPanel,
                 onSplit = onSplitAtPlayhead,
                 onDuplicate = onDuplicateSelected,
@@ -635,8 +655,8 @@ private fun AspectPreviewStage(
                     modifier = Modifier
                         .offset {
                             IntOffset(
-                                x = ((layer.posXFraction - 0.5f) * stageWidthPx).roundToInt(),
-                                y = ((layer.posYFraction - 0.5f) * stageHeightPx).roundToInt()
+                                x = ((animFrame.posXFraction - 0.5f) * stageWidthPx).roundToInt(),
+                                y = ((animFrame.posYFraction - 0.5f) * stageHeightPx).roundToInt()
                             )
                         }
                         .align(Alignment.Center)
@@ -689,21 +709,29 @@ private fun AspectPreviewStage(
                 }
             }
 
-            // Live Sticker Overlays (Lottie animated vector + Material icon fallback)
+            // Live Sticker Overlays (Lottie animated vector + Keyframe Motion Engine)
             project.stickerLayers.filter {
                 globalPositionMs in it.startTimeMs..(it.startTimeMs + it.durationMs)
             }.forEach { sticker ->
                 val isSelected = selection?.itemId == sticker.id
                 val lottiePath = sticker.lottieAssetPath
+                val localStickerMs = (globalPositionMs - sticker.startTimeMs).coerceAtLeast(0L)
+                val stickerKf = OverlayAnimator.evaluateSticker(sticker, localStickerMs)
                 Box(
                     modifier = Modifier
                         .offset {
                             IntOffset(
-                                x = ((sticker.posXFraction - 0.5f) * stageWidthPx).roundToInt(),
-                                y = ((sticker.posYFraction - 0.5f) * stageHeightPx).roundToInt()
+                                x = ((stickerKf.posX - 0.5f) * stageWidthPx).roundToInt(),
+                                y = ((stickerKf.posY - 0.5f) * stageHeightPx).roundToInt()
                             )
                         }
                         .align(Alignment.Center)
+                        .graphicsLayer {
+                            alpha = stickerKf.opacity
+                            scaleX = stickerKf.scale
+                            scaleY = stickerKf.scale
+                            rotationZ = stickerKf.rotationDeg
+                        }
                         .size(sticker.sizeDp.dp)
                         .clip(CircleShape)
                         .background(if (lottiePath != null) Color.Transparent else Color(0x990A0E17))
@@ -968,6 +996,11 @@ private fun ScrollablePhase2ToolDock(
     onTransitions: () -> Unit,
     onEffects: () -> Unit,
     onChroma: () -> Unit,
+    onSpeed: () -> Unit,
+    onTransform: () -> Unit,
+    onKeyframes: () -> Unit,
+    onAudioStudio: () -> Unit,
+    onVoiceover: () -> Unit,
     onTrimToggle: () -> Unit,
     onSplit: () -> Unit,
     onDuplicate: () -> Unit,
@@ -988,10 +1021,15 @@ private fun ScrollablePhase2ToolDock(
         verticalAlignment = Alignment.CenterVertically
     ) {
         TG7DockToolButton(icon = Icons.Rounded.Add, label = "Add Clip", tint = TG7Colors.NeonCyan, active = false, onClick = onAddMedia)
+        TG7DockToolButton(icon = Icons.Rounded.Speed, label = "Speed", tint = TG7Colors.NeonCyan, active = false, onClick = onSpeed)
+        TG7DockToolButton(icon = Icons.Rounded.CropRotate, label = "Transform", tint = TG7Colors.NeonCyan, active = false, onClick = onTransform)
+        TG7DockToolButton(icon = Icons.Rounded.Diamond, label = "Keyframes", tint = Color(0xFFFACC15), active = false, onClick = onKeyframes)
         TG7DockToolButton(icon = Icons.Rounded.AutoAwesome, label = "Effects", tint = TG7Colors.NeonCyan, active = false, onClick = onEffects)
         TG7DockToolButton(icon = Icons.Rounded.AutoFixHigh, label = "Transitions", tint = TG7Colors.NeonCyan, active = false, onClick = onTransitions)
         TG7DockToolButton(icon = Icons.Rounded.FilterCenterFocus, label = "Chroma", tint = Color(0xFF22C55E), active = false, onClick = onChroma)
-        TG7DockToolButton(icon = Icons.Rounded.MusicNote, label = "Audio", tint = Color(0xFF22C55E), active = false, onClick = onAddAudio)
+        TG7DockToolButton(icon = Icons.Rounded.GraphicEq, label = "Audio Mix", tint = Color(0xFF22C55E), active = false, onClick = onAudioStudio)
+        TG7DockToolButton(icon = Icons.Rounded.Mic, label = "Voiceover", tint = TG7Colors.BloodRed, active = false, onClick = onVoiceover)
+        TG7DockToolButton(icon = Icons.Rounded.MusicNote, label = "Import Audio", tint = Color(0xFF22C55E), active = false, onClick = onAddAudio)
         TG7DockToolButton(icon = Icons.Rounded.TextFields, label = "Text", tint = Color(0xFFC084FC), active = false, onClick = onAddText)
         TG7DockToolButton(icon = Icons.Rounded.EmojiEmotions, label = "Sticker", tint = TG7Colors.BloodRed, active = false, onClick = onAddSticker)
         TG7DockToolButton(icon = Icons.Rounded.Tune, label = "Trim", tint = if (trimActive) TG7Colors.NeonCyan else Color.White, active = trimActive, onClick = onTrimToggle)

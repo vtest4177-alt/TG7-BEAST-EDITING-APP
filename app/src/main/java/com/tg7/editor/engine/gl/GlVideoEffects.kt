@@ -46,6 +46,15 @@ object GlVideoEffects {
         uniform float uChromaSimilarity;
         uniform float uChromaSmoothness;
 
+        uniform float uPanX;
+        uniform float uPanY;
+        uniform float uScale;
+        uniform float uRotationRad;
+        uniform int uFlipH;
+        uniform int uFlipV;
+        uniform float uOpacity;
+        uniform int uBlendMode;
+
         const float PI = 3.14159265;
 
         float rand1(vec2 co) {
@@ -58,6 +67,44 @@ object GlVideoEffects {
 
         vec3 sampleRgb(vec2 uv) {
             return texture2D(uTexSampler, clamp(uv, 0.0, 1.0)).rgb;
+        }
+
+        vec2 applyTransformUv(vec2 uv) {
+            vec2 p = uv - 0.5;
+            if (uFlipH == 1) {
+                p.x = -p.x;
+            }
+            if (uFlipV == 1) {
+                p.y = -p.y;
+            }
+            p.x -= uPanX;
+            p.y += uPanY;
+            float aspect = max(uResolutionX, 1.0) / max(uResolutionY, 1.0);
+            p.x *= aspect;
+            float invScale = 1.0 / max(uScale, 0.1);
+            p *= invScale;
+            float cs = cos(-uRotationRad);
+            float sn = sin(-uRotationRad);
+            vec2 rot = vec2(p.x * cs - p.y * sn, p.x * sn + p.y * cs);
+            rot.x /= aspect;
+            return rot + 0.5;
+        }
+
+        vec3 applyBlendCurve(vec3 col) {
+            if (uBlendMode == 1) {
+                // Screen lift
+                return 1.0 - (1.0 - col) * (1.0 - col * 0.45);
+            } else if (uBlendMode == 2) {
+                // Linear Add glow
+                return clamp(col * 1.38, 0.0, 1.0);
+            } else if (uBlendMode == 3) {
+                // Multiply deepen
+                return clamp(col * col * 1.15, 0.0, 1.0);
+            } else if (uBlendMode == 4) {
+                // Overlay S-curve
+                return clamp(mix(2.0 * col * col, 1.0 - 2.0 * (1.0 - col) * (1.0 - col), step(0.5, luma(col))), 0.0, 1.0);
+            }
+            return col;
         }
 
         vec2 computeWarpedUv(vec2 uv) {
@@ -447,8 +494,11 @@ object GlVideoEffects {
         }
 
         void main() {
-            vec2 workUv = computeWarpedUv(vUv);
-            vec3 orig = sampleRgb(vUv);
+            vec2 txUv = applyTransformUv(vUv);
+            float inside = step(0.0, txUv.x) * step(txUv.x, 1.0) * step(0.0, txUv.y) * step(txUv.y, 1.0);
+            vec2 safeTxUv = clamp(txUv, 0.0, 1.0);
+            vec2 workUv = computeWarpedUv(safeTxUv);
+            vec3 orig = sampleRgb(safeTxUv);
             vec3 base = sampleRgb(workUv);
             vec3 fxColor = base;
 
@@ -470,8 +520,10 @@ object GlVideoEffects {
 
             vec3 blended = (uFamily == 0) ? orig : mix(orig, fxColor, clamp(uIntensity, 0.0, 1.0));
             vec3 graded = applyColorGrading(blended);
-            vec3 keyed = applyChromaKey(graded);
-            gl_FragColor = vec4(clamp(keyed, 0.0, 1.0), 1.0);
+            vec3 styled = applyBlendCurve(graded);
+            vec3 keyed = applyChromaKey(styled);
+            vec3 finalRgb = keyed * inside * clamp(uOpacity, 0.0, 1.0);
+            gl_FragColor = vec4(clamp(finalRgb, 0.0, 1.0), 1.0);
         }
     """
 }
