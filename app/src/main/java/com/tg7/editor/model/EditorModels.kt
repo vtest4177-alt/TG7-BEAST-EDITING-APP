@@ -391,7 +391,8 @@ data class TextLayer(
     val scale: Float = 1.0f,
     val rotationDeg: Float = 0f,
     val opacity: Float = 1.0f,
-    val keyframes: List<KeyframeNode> = emptyList()
+    val keyframes: List<KeyframeNode> = emptyList(),
+    val customFontPath: String? = null
 )
 
 data class StickerLayer(

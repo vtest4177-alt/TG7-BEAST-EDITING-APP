@@ -264,7 +264,13 @@ class HardwareVideoExporter(context: Context) {
         }
     }
 
-    private fun resolveTypeface(family: TextFontFamily): Typeface {
+    private fun resolveTypeface(family: TextFontFamily, customFontPath: String?): Typeface {
+        if (!customFontPath.isNullOrBlank()) {
+            val file = java.io.File(customFontPath)
+            if (file.exists() && file.length() > 128L) {
+                runCatching { Typeface.createFromFile(file) }.getOrNull()?.let { return it }
+            }
+        }
         return when (family) {
             TextFontFamily.DISPLAY -> Typeface.create("sans-serif-black", Typeface.BOLD)
             TextFontFamily.SANS -> Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
@@ -277,7 +283,7 @@ class HardwareVideoExporter(context: Context) {
 
     private fun createTimedTextOverlay(layer: TextLayer, targetHeight: Int): BitmapOverlay {
         val textPx = (layer.fontSizeSp * (targetHeight / 720f) * 2.1f).coerceIn(28f, 160f)
-        val tf = resolveTypeface(layer.fontFamily)
+        val tf = resolveTypeface(layer.fontFamily, layer.customFontPath)
         val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = layer.colorHex.toInt()
             textSize = textPx
@@ -379,7 +385,15 @@ class HardwareVideoExporter(context: Context) {
     private fun createTimedStickerOverlay(sticker: StickerLayer, targetHeight: Int): BitmapOverlay {
         val sizePx = (sticker.sizeDp * (targetHeight / 720f) * 2.2f).toInt().coerceIn(84, 280)
         val lottieComp = sticker.lottieAssetPath?.let { path ->
-            runCatching { LottieCompositionFactory.fromAssetSync(appContext, path).value }.getOrNull()
+            runCatching {
+                if (path.startsWith("/")) {
+                    java.io.FileInputStream(java.io.File(path)).use { stream ->
+                        LottieCompositionFactory.fromJsonInputStreamSync(stream, path).value
+                    }
+                } else {
+                    LottieCompositionFactory.fromAssetSync(appContext, path).value
+                }
+            }.getOrNull()
         }
 
         val bmpA = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)

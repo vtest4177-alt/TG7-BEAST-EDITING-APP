@@ -38,6 +38,8 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Style
 import androidx.compose.material.icons.rounded.TextFields
+import androidx.compose.material.icons.rounded.UploadFile
+import androidx.compose.ui.text.font.Font
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -81,13 +83,21 @@ import com.airbnb.lottie.compose.animateLottieCompositionAsState
 import com.airbnb.lottie.compose.rememberLottieComposition
 import com.tg7.editor.data.TextAndStickerLoader
 import com.tg7.editor.engine.anim.OverlayAnimator
+import com.tg7.editor.model.CustomFontEntry
 import com.tg7.editor.model.LottieStickerSpec
 import com.tg7.editor.model.StickerPreset
 import com.tg7.editor.model.TextFontFamily
 import com.tg7.editor.model.TextLayer
 import com.tg7.editor.ui.theme.TG7Colors
+import java.io.File
 
-fun resolveComposeFontFamily(family: TextFontFamily): FontFamily {
+fun resolveComposeFontFamily(family: TextFontFamily, customFontPath: String? = null): FontFamily {
+    if (!customFontPath.isNullOrBlank()) {
+        val file = File(customFontPath)
+        if (file.exists() && file.length() > 128L) {
+            runCatching { FontFamily(Font(file)) }.getOrNull()?.let { return it }
+        }
+    }
     return when (family) {
         TextFontFamily.SERIF -> FontFamily.Serif
         TextFontFamily.MONO -> FontFamily.Monospace
@@ -99,6 +109,9 @@ fun resolveComposeFontFamily(family: TextFontFamily): FontFamily {
 @Composable
 fun AddTextSheet(
     editingLayer: TextLayer? = null,
+    installedFonts: List<CustomFontEntry> = emptyList(),
+    onImportFontClick: () -> Unit = {},
+    onOpenAssetHubFontsClick: () -> Unit = {},
     onConfirmText: (
         editingLayerId: String?,
         text: String,
@@ -109,7 +122,8 @@ fun AddTextSheet(
         fontFamily: TextFontFamily,
         bgColorHex: Long,
         hasOutline: Boolean,
-        letterSpacingEm: Float
+        letterSpacingEm: Float,
+        customFontPath: String?
     ) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -128,6 +142,7 @@ fun AddTextSheet(
     var selectedTemplateId by remember(editingLayer) { mutableStateOf(editingLayer?.templateId ?: "tpl_tg7_display") }
     var selectedAnimId by remember(editingLayer) { mutableStateOf(editingLayer?.animationId ?: "ta_pop_bounce") }
     var selectedFont by remember(editingLayer) { mutableStateOf(editingLayer?.fontFamily ?: TextFontFamily.DISPLAY) }
+    var selectedCustomFontPath by remember(editingLayer) { mutableStateOf(editingLayer?.customFontPath) }
     var selectedBgColor by remember(editingLayer) { mutableLongStateOf(editingLayer?.bgColorHex ?: 0L) }
     var hasOutline by remember(editingLayer) { mutableStateOf(editingLayer?.hasOutline ?: true) }
     var letterSpacingEm by remember(editingLayer) { mutableFloatStateOf(editingLayer?.letterSpacingEm ?: 0.04f) }
@@ -318,7 +333,7 @@ fun AddTextSheet(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         TextFontFamily.entries.forEach { ff ->
-                            val active = ff == selectedFont
+                            val active = selectedCustomFontPath == null && ff == selectedFont
                             Box(
                                 modifier = Modifier
                                     .heightIn(min = 48.dp)
@@ -327,6 +342,7 @@ fun AddTextSheet(
                                     .border(1.dp, if (active) TG7Colors.NeonCyan else TG7Colors.BorderSubtle, RoundedCornerShape(10.dp))
                                     .clickable {
                                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        selectedCustomFontPath = null
                                         selectedFont = ff
                                     }
                                     .padding(horizontal = 12.dp),
@@ -339,6 +355,87 @@ fun AddTextSheet(
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 12.sp
                                 )
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Hub & Imported Fonts (${installedFonts.size})",
+                            color = TG7Colors.TextMuted,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(
+                                modifier = Modifier
+                                    .heightIn(min = 40.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color(0xFF131B2A))
+                                    .border(1.dp, TG7Colors.BorderSubtle, RoundedCornerShape(10.dp))
+                                    .clickable {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        onImportFontClick()
+                                    }
+                                    .padding(horizontal = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(Icons.Rounded.UploadFile, contentDescription = null, tint = Color(0xFFC084FC), modifier = Modifier.size(14.dp))
+                                Text(".ttf/.otf", color = Color(0xFFC084FC), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+                            Row(
+                                modifier = Modifier
+                                    .heightIn(min = 40.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color(0xFF0E2530))
+                                    .border(1.dp, TG7Colors.NeonCyan, RoundedCornerShape(10.dp))
+                                    .clickable {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        onOpenAssetHubFontsClick()
+                                    }
+                                    .padding(horizontal = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("50+ Google Fonts", color = TG7Colors.NeonCyan, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    if (installedFonts.isNotEmpty()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            installedFonts.forEach { cf ->
+                                val active = selectedCustomFontPath == cf.filePath
+                                Box(
+                                    modifier = Modifier
+                                        .heightIn(min = 48.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(if (active) Color(0xFFC084FC) else Color(0xFF0E121C))
+                                        .border(1.dp, if (active) Color(0xFFC084FC) else TG7Colors.BorderSubtle, RoundedCornerShape(10.dp))
+                                        .clickable {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            selectedCustomFontPath = cf.filePath
+                                        }
+                                        .padding(horizontal = 12.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = cf.name,
+                                        color = if (active) Color.Black else Color.White,
+                                        fontFamily = resolveComposeFontFamily(selectedFont, cf.filePath),
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp
+                                    )
+                                }
                             }
                         }
                     }
@@ -522,7 +619,7 @@ fun AddTextSheet(
                                 Text(
                                     text = frame.visibleText,
                                     color = Color(frame.overrideColorHex ?: selectedColor),
-                                    fontFamily = resolveComposeFontFamily(selectedFont),
+                                    fontFamily = resolveComposeFontFamily(selectedFont, selectedCustomFontPath),
                                     fontWeight = FontWeight.Black,
                                     fontSize = 11.sp,
                                     maxLines = 1,
@@ -562,7 +659,8 @@ fun AddTextSheet(
                         selectedFont,
                         selectedBgColor,
                         hasOutline,
-                        letterSpacingEm
+                        letterSpacingEm,
+                        selectedCustomFontPath
                     )
                 },
                 modifier = Modifier

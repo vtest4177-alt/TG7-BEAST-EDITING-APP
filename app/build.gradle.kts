@@ -12,8 +12,8 @@ android {
         applicationId = "com.tg7.editor"
         minSdk = 24
         targetSdk = 34
-        versionCode = 6
-        versionName = "6.0.0-phase6"
+        versionCode = 7
+        versionName = "7.0.0-phase7"
     }
 
     buildFeatures {

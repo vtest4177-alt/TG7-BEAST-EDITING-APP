@@ -4,6 +4,7 @@ import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.tg7.editor.data.AssetHubRepository
 import com.tg7.editor.data.ProjectRepository
 import com.tg7.editor.data.RecentMediaLoader
 import com.tg7.editor.engine.audio.AudioWaveformExtractor
@@ -17,9 +18,12 @@ import com.tg7.editor.model.BlendModePreset
 import com.tg7.editor.model.CanvasAspectRatio
 import com.tg7.editor.model.ChromaKeyConfig
 import com.tg7.editor.model.ClipColorGrade
+import com.tg7.editor.model.CustomFontEntry
 import com.tg7.editor.model.EditorProject
 import com.tg7.editor.model.ExportResolution
 import com.tg7.editor.model.ExportState
+import com.tg7.editor.model.HubAssetItem
+import com.tg7.editor.model.HubAssetKind
 import com.tg7.editor.model.KeyframeNode
 import com.tg7.editor.model.LottieStickerSpec
 import com.tg7.editor.model.MediaKind
@@ -39,11 +43,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.io.File
 import java.util.UUID
 
 class EditorViewModel(application: Application) : AndroidViewModel(application) {
     private val appContext = application.applicationContext
     private val repository = ProjectRepository(appContext)
+    private val assetHubRepository = AssetHubRepository(appContext)
     val playerController = StudioPlayerController(appContext, viewModelScope)
     private val exporter = HardwareVideoExporter(appContext)
     private val voiceoverRecorder = VoiceoverRecorder(appContext)
@@ -138,6 +144,27 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private val _voiceoverElapsedMs = MutableStateFlow(0L)
     val voiceoverElapsedMs: StateFlow<Long> = _voiceoverElapsedMs.asStateFlow()
 
+    private val _showAssetHubSheet = MutableStateFlow(false)
+    val showAssetHubSheet: StateFlow<Boolean> = _showAssetHubSheet.asStateFlow()
+
+    private val _hubItems = MutableStateFlow<List<HubAssetItem>>(emptyList())
+    val hubItems: StateFlow<List<HubAssetItem>> = _hubItems.asStateFlow()
+
+    private val _installedFonts = MutableStateFlow<List<CustomFontEntry>>(emptyList())
+    val installedFonts: StateFlow<List<CustomFontEntry>> = _installedFonts.asStateFlow()
+
+    private val _hubManifestUrl = MutableStateFlow(assetHubRepository.getManifestUrl())
+    val hubManifestUrl: StateFlow<String> = _hubManifestUrl.asStateFlow()
+
+    private val _hubCacheSizeLabel = MutableStateFlow("0.00 MB cached")
+    val hubCacheSizeLabel: StateFlow<String> = _hubCacheSizeLabel.asStateFlow()
+
+    private val _isRefreshingHub = MutableStateFlow(false)
+    val isRefreshingHub: StateFlow<Boolean> = _isRefreshingHub.asStateFlow()
+
+    private val _downloadingHubIds = MutableStateFlow<Set<String>>(emptySet())
+    val downloadingHubIds: StateFlow<Set<String>> = _downloadingHubIds.asStateFlow()
+
     private val _showTrimPanel = MutableStateFlow(false)
     val showTrimPanel: StateFlow<Boolean> = _showTrimPanel.asStateFlow()
 
@@ -159,6 +186,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             _projects.value = repository.loadProjects()
             _recoveryProject.value = repository.findRecoveryProject()
             refreshRecentMedia()
+            reloadAssetHubState()
             exporter.clearOldExports()
         }
     }
@@ -379,7 +407,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         fontFamily: TextFontFamily,
         bgColorHex: Long,
         hasOutline: Boolean,
-        letterSpacingEm: Float
+        letterSpacingEm: Float,
+        customFontPath: String? = null
     ) {
         val proj = activeProject() ?: return
         val cleanText = text.trim().ifBlank { return }
@@ -395,7 +424,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                         fontFamily = fontFamily,
                         bgColorHex = bgColorHex,
                         hasOutline = hasOutline,
-                        letterSpacingEm = letterSpacingEm
+                        letterSpacingEm = letterSpacingEm,
+                        customFontPath = customFontPath
                     )
                 } else existing
             }
@@ -418,7 +448,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 fontFamily = fontFamily,
                 bgColorHex = bgColorHex,
                 hasOutline = hasOutline,
-                letterSpacingEm = letterSpacingEm
+                letterSpacingEm = letterSpacingEm,
+                customFontPath = customFontPath
             )
             mutateProject(
                 newProject = proj.copy(textLayers = proj.textLayers + layer),
@@ -1411,6 +1442,180 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun cancelExport() {
         exporter.cancel()
         _exportState.value = ExportState.Idle
+    }
+
+    fun openAssetHubSheet() {
+        _showAssetHubSheet.value = true
+        viewModelScope.launch { reloadAssetHubState() }
+    }
+
+    fun closeAssetHubSheet() {
+        _showAssetHubSheet.value = false
+    }
+
+    fun refreshAssetHubManifest(url: String) {
+        if (_isRefreshingHub.value) return
+        assetHubRepository.setManifestUrl(url)
+        _hubManifestUrl.value = assetHubRepository.getManifestUrl()
+        viewModelScope.launch {
+            _isRefreshingHub.value = true
+            val res = assetHubRepository.refreshRemoteCatalog(url)
+            _isRefreshingHub.value = false
+            res.onSuccess { list ->
+                _hubItems.value = list
+                _hubCacheSizeLabel.value = assetHubRepository.getCacheSizeLabel()
+                _bannerMessage.value = "Synced ${list.size} assets from remote manifest."
+            }.onFailure { err ->
+                _bannerMessage.value = "Manifest sync failed (${err.localizedMessage ?: "Offline"}). Using cached catalog."
+            }
+        }
+    }
+
+    fun clearAssetHubCache() {
+        viewModelScope.launch {
+            assetHubRepository.clearDownloadedCache()
+            reloadAssetHubState()
+            _bannerMessage.value = "Cleared Asset Hub download cache."
+        }
+    }
+
+    fun importCustomFontUri(uri: Uri) {
+        viewModelScope.launch {
+            val res = assetHubRepository.importUserFont(uri)
+            res.onSuccess { entry ->
+                _installedFonts.value = assetHubRepository.listInstalledFonts()
+                _hubCacheSizeLabel.value = assetHubRepository.getCacheSizeLabel()
+                _bannerMessage.value = "Font imported: ${entry.name}"
+                val proj = activeProject()
+                val sel = _selection.value
+                if (proj != null && sel?.trackType == TrackType.TEXT) {
+                    val updated = proj.copy(
+                        textLayers = proj.textLayers.map { layer ->
+                            if (layer.id == sel.itemId) layer.copy(customFontPath = entry.filePath) else layer
+                        }
+                    )
+                    mutateProject(updated, rebuildPlayer = false)
+                }
+            }.onFailure { err ->
+                _bannerMessage.value = err.localizedMessage ?: "Invalid .ttf/.otf font file."
+            }
+        }
+    }
+
+    fun downloadOrApplyHubAsset(item: HubAssetItem) {
+        if (item.id in _downloadingHubIds.value) return
+        viewModelScope.launch {
+            _downloadingHubIds.value = _downloadingHubIds.value + item.id
+            val result = assetHubRepository.ensureAssetCached(item)
+            _downloadingHubIds.value = _downloadingHubIds.value - item.id
+
+            result.onFailure { err ->
+                _bannerMessage.value = "Asset failed: ${err.localizedMessage ?: "Check internet"}"
+                return@launch
+            }
+            val cachedItem = result.getOrNull() ?: return@launch
+            reloadAssetHubState()
+
+            val proj = activeProject()
+            if (proj == null) {
+                _bannerMessage.value = "${cachedItem.name} cached (${cachedItem.license})."
+                return@launch
+            }
+
+            when (cachedItem.kind) {
+                HubAssetKind.EFFECT -> {
+                    val targetClip = proj.clips.firstOrNull { it.id == _selection.value?.itemId }
+                        ?: proj.clips.firstOrNull()
+                    if (targetClip != null) {
+                        applyClipEffect(targetClip.id, cachedItem.engineRefId, 0.85f)
+                        _bannerMessage.value = "Applied ${cachedItem.name} (${cachedItem.license})"
+                    }
+                }
+                HubAssetKind.TRANSITION -> {
+                    if (proj.clips.size < 2) {
+                        _bannerMessage.value = "Add 2+ clips to apply transitions."
+                    } else {
+                        val selIdx = proj.clips.indexOfFirst { it.id == _selection.value?.itemId }
+                        val cutIdx = if (selIdx in 0 until proj.clips.lastIndex) selIdx else 0
+                        applyTransition(cutIdx, cachedItem.engineRefId, 500L)
+                        _bannerMessage.value = "Applied ${cachedItem.name} (${cachedItem.license})"
+                    }
+                }
+                HubAssetKind.STICKER -> {
+                    val path = cachedItem.cachedFilePath ?: cachedItem.localAssetFallback ?: return@launch
+                    val start = playerController.globalPositionMs.value
+                    val dur = 3000L.coerceAtMost((proj.totalDurationMs - start).coerceAtLeast(1500L))
+                    val tint = cachedItem.engineRefId.removePrefix("0x").removePrefix("0X").toLongOrNull(16) ?: 0xFF00F0FFL
+                    val sticker = StickerLayer(
+                        preset = StickerPreset.SPARKLE,
+                        startTimeMs = start,
+                        durationMs = dur,
+                        sizeDp = 76f,
+                        tintHex = tint,
+                        lottieAssetPath = path,
+                        label = cachedItem.name
+                    )
+                    mutateProject(
+                        newProject = proj.copy(stickerLayers = proj.stickerLayers + sticker),
+                        newSelection = TimelineSelection(TrackType.STICKER, sticker.id),
+                        rebuildPlayer = false
+                    )
+                    _showAssetHubSheet.value = false
+                    _bannerMessage.value = "Added ${cachedItem.name} (${cachedItem.license})"
+                }
+                HubAssetKind.SFX -> {
+                    val filePath = cachedItem.cachedFilePath ?: return@launch
+                    val uri = Uri.fromFile(File(filePath))
+                    val probed = MediaPickerHelper.probeAudioUri(appContext, uri, playerController.globalPositionMs.value)
+                        ?: AudioClip(
+                            uriString = uri.toString(),
+                            displayName = cachedItem.name,
+                            startTimeMs = playerController.globalPositionMs.value,
+                            sourceDurationMs = 1100L,
+                            trimStartMs = 0L,
+                            trimEndMs = 1100L
+                        )
+                    val analysis = AudioWaveformExtractor.analyze(appContext, probed.uriString, probed.sourceDurationMs)
+                    val enriched = probed.copy(
+                        displayName = cachedItem.name,
+                        waveformPeaks = analysis.waveformPeaks,
+                        beatMarkersMs = analysis.beatMarkersMs
+                    )
+                    val latest = activeProject() ?: proj
+                    mutateProject(
+                        newProject = latest.copy(audioClips = latest.audioClips + enriched),
+                        newSelection = TimelineSelection(TrackType.AUDIO, enriched.id),
+                        rebuildPlayer = true
+                    )
+                    _showAssetHubSheet.value = false
+                    _bannerMessage.value = "Added SFX: ${cachedItem.name} (${cachedItem.license})"
+                }
+                HubAssetKind.FONT -> {
+                    val fontPath = cachedItem.cachedFilePath
+                    val sel = _selection.value
+                    if (!fontPath.isNullOrBlank() && sel?.trackType == TrackType.TEXT) {
+                        val updated = proj.copy(
+                            textLayers = proj.textLayers.map { layer ->
+                                if (layer.id == sel.itemId) layer.copy(customFontPath = fontPath) else layer
+                            }
+                        )
+                        mutateProject(updated, rebuildPlayer = false)
+                        _showAssetHubSheet.value = false
+                        _bannerMessage.value = "Applied font ${cachedItem.name} (${cachedItem.license})"
+                    } else {
+                        _showAssetHubSheet.value = false
+                        _showTextSheet.value = true
+                        _bannerMessage.value = "Font ready in Text Studio: ${cachedItem.name}"
+                    }
+                }
+            }
+        }
+    }
+
+    private suspend fun reloadAssetHubState() {
+        _hubItems.value = assetHubRepository.loadCatalog()
+        _installedFonts.value = assetHubRepository.listInstalledFonts()
+        _hubCacheSizeLabel.value = assetHubRepository.getCacheSizeLabel()
     }
 
     fun dismissBanner() {

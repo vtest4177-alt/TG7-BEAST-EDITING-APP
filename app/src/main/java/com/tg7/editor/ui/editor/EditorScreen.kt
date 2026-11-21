@@ -44,6 +44,7 @@ import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.AutoFixHigh
 import androidx.compose.material.icons.rounded.CheckBox
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.ContentCut
 import androidx.compose.material.icons.rounded.CropRotate
@@ -169,6 +170,7 @@ fun EditorScreen(
     onOpenKeyframesDock: () -> Unit,
     onOpenAudioStudioDock: () -> Unit,
     onOpenVoiceoverDock: () -> Unit,
+    onOpenAssetHubDock: () -> Unit,
     onToggleFullscreen: () -> Unit,
     onDismissError: () -> Unit
 ) {
@@ -463,6 +465,7 @@ fun EditorScreen(
                         onKeyframes = onOpenKeyframesDock,
                         onAudioStudio = onOpenAudioStudioDock,
                         onVoiceover = onOpenVoiceoverDock,
+                        onAssetHub = onOpenAssetHubDock,
                         onTrimToggle = onToggleTrimPanel,
                         onSplit = onSplitAtPlayhead,
                         onDuplicate = onDuplicateSelected,
@@ -551,6 +554,7 @@ fun EditorScreen(
                 onKeyframes = onOpenKeyframesDock,
                 onAudioStudio = onOpenAudioStudioDock,
                 onVoiceover = onOpenVoiceoverDock,
+                onAssetHub = onOpenAssetHubDock,
                 onTrimToggle = onToggleTrimPanel,
                 onSplit = onSplitAtPlayhead,
                 onDuplicate = onDuplicateSelected,
@@ -698,7 +702,7 @@ private fun AspectPreviewStage(
                         style = TextStyle(
                             color = Color(animFrame.overrideColorHex ?: layer.colorHex),
                             fontSize = layer.fontSizeSp.sp,
-                            fontFamily = resolveComposeFontFamily(layer.fontFamily),
+                            fontFamily = resolveComposeFontFamily(layer.fontFamily, layer.customFontPath),
                             fontWeight = FontWeight.Black,
                             letterSpacing = layer.letterSpacingEm.em,
                             shadow = if (layer.hasOutline) {
@@ -759,7 +763,14 @@ private fun AspectPreviewStage(
                     contentAlignment = Alignment.Center
                 ) {
                     if (lottiePath != null) {
-                        val comp by rememberLottieComposition(LottieCompositionSpec.Asset(lottiePath))
+                        val compSpec = remember(lottiePath) {
+                            if (lottiePath.startsWith("/")) {
+                                LottieCompositionSpec.File(lottiePath)
+                            } else {
+                                LottieCompositionSpec.Asset(lottiePath)
+                            }
+                        }
+                        val comp by rememberLottieComposition(compSpec)
                         val localMs = (globalPositionMs - sticker.startTimeMs).coerceAtLeast(0L)
                         val progress = ((localMs % 1500L) / 1500f)
                         LottieAnimation(
@@ -1001,6 +1012,7 @@ private fun ScrollablePhase2ToolDock(
     onKeyframes: () -> Unit,
     onAudioStudio: () -> Unit,
     onVoiceover: () -> Unit,
+    onAssetHub: () -> Unit,
     onTrimToggle: () -> Unit,
     onSplit: () -> Unit,
     onDuplicate: () -> Unit,
@@ -1021,6 +1033,7 @@ private fun ScrollablePhase2ToolDock(
         verticalAlignment = Alignment.CenterVertically
     ) {
         TG7DockToolButton(icon = Icons.Rounded.Add, label = "Add Clip", tint = TG7Colors.NeonCyan, active = false, onClick = onAddMedia)
+        TG7DockToolButton(icon = Icons.Rounded.CloudDownload, label = "Asset Hub", tint = TG7Colors.NeonCyan, active = false, onClick = onAssetHub)
         TG7DockToolButton(icon = Icons.Rounded.Speed, label = "Speed", tint = TG7Colors.NeonCyan, active = false, onClick = onSpeed)
         TG7DockToolButton(icon = Icons.Rounded.CropRotate, label = "Transform", tint = TG7Colors.NeonCyan, active = false, onClick = onTransform)
         TG7DockToolButton(icon = Icons.Rounded.Diamond, label = "Keyframes", tint = Color(0xFFFACC15), active = false, onClick = onKeyframes)

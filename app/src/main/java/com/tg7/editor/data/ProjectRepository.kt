@@ -121,7 +121,8 @@ class ProjectRepository(context: Context) {
                 scale = t.scale,
                 rotationDeg = t.rotationDeg,
                 opacity = t.opacity,
-                keyframesJson = KeyframeEngine.keyframesToJson(t.keyframes)
+                keyframesJson = KeyframeEngine.keyframesToJson(t.keyframes),
+                customFontPath = t.customFontPath
             )
         }
         val stickerEntities = project.stickerLayers.map { s ->
@@ -292,7 +293,8 @@ class ProjectRepository(context: Context) {
                     scale = t.scale,
                     rotationDeg = t.rotationDeg,
                     opacity = t.opacity,
-                    keyframes = KeyframeEngine.keyframesFromJson(t.keyframesJson)
+                    keyframes = KeyframeEngine.keyframesFromJson(t.keyframesJson),
+                    customFontPath = t.customFontPath
                 )
             },
             stickerLayers = stickerLayers.sortedBy { it.startTimeMs }.map { s ->

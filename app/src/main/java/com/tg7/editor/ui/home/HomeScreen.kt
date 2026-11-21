@@ -33,6 +33,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AddCircle
 import androidx.compose.material.icons.rounded.AspectRatio
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.Crop169
 import androidx.compose.material.icons.rounded.CropPortrait
 import androidx.compose.material.icons.rounded.CropSquare
@@ -87,7 +88,8 @@ fun HomeScreen(
     onOpenProject: (String) -> Unit,
     onDeleteProject: (String) -> Unit,
     onRequestRecentPermission: () -> Unit,
-    onQuickStartRecent: (RecentMediaItem) -> Unit
+    onQuickStartRecent: (RecentMediaItem) -> Unit,
+    onOpenAssetHub: () -> Unit = {}
 ) {
     val haptic = LocalHapticFeedback.current
     val heroInteraction = remember { MutableInteractionSource() }
@@ -118,18 +120,27 @@ fun HomeScreen(
         ) {
             TG7BrandLogo()
 
-            Box(
+            Row(
                 modifier = Modifier
-                    .background(TG7Colors.GlassCard, RoundedCornerShape(10.dp))
-                    .border(1.dp, TG7Colors.BorderSubtle, RoundedCornerShape(10.dp))
-                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                    .defaultMinSize(minHeight = 48.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(TG7Colors.GlassCard)
+                    .border(1.dp, TG7Colors.NeonCyan.copy(alpha = 0.65f), RoundedCornerShape(12.dp))
+                    .clickable {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onOpenAssetHub()
+                    }
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
+                Icon(Icons.Rounded.CloudDownload, contentDescription = "Asset Hub", tint = TG7Colors.NeonCyan, modifier = Modifier.size(16.dp))
                 Text(
-                    text = "ROOM · MULTI-TRACK",
+                    text = "Asset Hub",
                     color = TG7Colors.NeonCyan,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.8.sp
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 0.6.sp
                 )
             }
         }

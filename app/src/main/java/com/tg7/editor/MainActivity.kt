@@ -31,6 +31,7 @@ import com.tg7.editor.crash.CrashHandler
 import com.tg7.editor.model.TrackType
 import com.tg7.editor.ui.components.AddStickerSheet
 import com.tg7.editor.ui.components.AddTextSheet
+import com.tg7.editor.ui.components.AssetHubSheet
 import com.tg7.editor.ui.components.AudioStudioSheet
 import com.tg7.editor.ui.components.EffectsAndColorSheet
 import com.tg7.editor.ui.components.ExportSheet
@@ -115,6 +116,13 @@ class MainActivity : ComponentActivity() {
                 val isFullscreenPreview by viewModel.isFullscreenPreview.collectAsState()
                 val isImporting by viewModel.isImporting.collectAsState()
                 val bannerMessage by viewModel.bannerMessage.collectAsState()
+                val showAssetHubSheet by viewModel.showAssetHubSheet.collectAsState()
+                val hubItems by viewModel.hubItems.collectAsState()
+                val installedFonts by viewModel.installedFonts.collectAsState()
+                val hubManifestUrl by viewModel.hubManifestUrl.collectAsState()
+                val hubCacheSizeLabel by viewModel.hubCacheSizeLabel.collectAsState()
+                val isRefreshingHub by viewModel.isRefreshingHub.collectAsState()
+                val downloadingHubIds by viewModel.downloadingHubIds.collectAsState()
 
                 val isPlaying by viewModel.playerController.isPlaying.collectAsState()
                 val globalPositionMs by viewModel.playerController.globalPositionMs.collectAsState()
@@ -153,6 +161,27 @@ class MainActivity : ComponentActivity() {
                     if (uri != null) {
                         viewModel.onAudioPicked(uri)
                     }
+                }
+
+                val fontPickerLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.OpenDocument()
+                ) { uri ->
+                    if (uri != null) {
+                        viewModel.importCustomFontUri(uri)
+                    }
+                }
+
+                val launchCustomFontPicker = {
+                    fontPickerLauncher.launch(
+                        arrayOf(
+                            "font/ttf",
+                            "font/otf",
+                            "application/x-font-ttf",
+                            "application/font-sfnt",
+                            "application/octet-stream",
+                            "*/*"
+                        )
+                    )
                 }
 
                 val recentPermissionLauncher = rememberLauncherForActivityResult(
@@ -226,7 +255,8 @@ class MainActivity : ComponentActivity() {
                         onOpenProject = viewModel::openProject,
                         onDeleteProject = viewModel::deleteProject,
                         onRequestRecentPermission = requestRecentPermissions,
-                        onQuickStartRecent = viewModel::createNewProjectFromRecent
+                        onQuickStartRecent = viewModel::createNewProjectFromRecent,
+                        onOpenAssetHub = viewModel::openAssetHubSheet
                     )
                 } else {
                     EditorScreen(
@@ -276,6 +306,7 @@ class MainActivity : ComponentActivity() {
                         onOpenKeyframesDock = { viewModel.openKeyframeSheet() },
                         onOpenAudioStudioDock = { viewModel.openAudioStudioSheet(0) },
                         onOpenVoiceoverDock = { viewModel.openAudioStudioSheet(1) },
+                        onOpenAssetHubDock = viewModel::openAssetHubSheet,
                         onToggleFullscreen = viewModel::toggleFullscreenPreview,
                         onDismissError = {
                             viewModel.playerController.clearError()
@@ -307,6 +338,12 @@ class MainActivity : ComponentActivity() {
                         } else null
                         AddTextSheet(
                             editingLayer = editingTextLayer,
+                            installedFonts = installedFonts,
+                            onImportFontClick = launchCustomFontPicker,
+                            onOpenAssetHubFontsClick = {
+                                viewModel.setTextSheetVisible(false)
+                                viewModel.openAssetHubSheet()
+                            },
                             onConfirmText = viewModel::addOrUpdateTextLayer,
                             onDismiss = { viewModel.setTextSheetVisible(false) }
                         )
@@ -422,6 +459,23 @@ class MainActivity : ComponentActivity() {
                             onDismiss = { viewModel.setExportSheetVisible(false) }
                         )
                     }
+                }
+
+                if (showAssetHubSheet) {
+                    AssetHubSheet(
+                        items = hubItems,
+                        installedFonts = installedFonts,
+                        manifestUrl = hubManifestUrl,
+                        cacheSizeLabel = hubCacheSizeLabel,
+                        isRefreshing = isRefreshingHub,
+                        downloadingIds = downloadingHubIds,
+                        inProjectEditor = activeProject != null,
+                        onRefreshManifest = viewModel::refreshAssetHubManifest,
+                        onImportCustomFontClick = launchCustomFontPicker,
+                        onDownloadOrApplyAsset = viewModel::downloadOrApplyHubAsset,
+                        onClearCache = viewModel::clearAssetHubCache,
+                        onDismiss = viewModel::closeAssetHubSheet
+                    )
                 }
             }
         }
